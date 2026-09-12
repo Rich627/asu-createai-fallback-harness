@@ -311,22 +311,25 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        if not self.authorized():
-            return self.json_response(401, {"error": {"message": "Local bridge authentication required."}})
-        if self.path == "/health":
-            return self.json_response(200, {"status": "ok"})
-        proxy = getattr(self.server, "proxy_get", None)
-        if proxy:
-            try:
-                status, body = proxy(self.path, self.headers)
-            except BridgeError as exc:
-                return self.json_response(exc.status, {"error": {"message": str(exc)}})
-            self.send_response(status)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            return self.wfile.write(body)
-        self.json_response(404, {"error": {"message": "Unsupported endpoint."}})
+        try:
+            if not self.authorized():
+                return self.json_response(401, {"error": {"message": "Local bridge authentication required."}})
+            if self.path == "/health":
+                return self.json_response(200, {"status": "ok"})
+            proxy = getattr(self.server, "proxy_get", None)
+            if proxy:
+                try:
+                    status, body = proxy(self.path, self.headers)
+                except BridgeError as exc:
+                    return self.json_response(exc.status, {"error": {"message": str(exc)}})
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                return self.wfile.write(body)
+            self.json_response(404, {"error": {"message": "Unsupported endpoint."}})
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def do_POST(self):
         streaming = False

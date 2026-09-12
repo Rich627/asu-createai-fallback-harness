@@ -237,12 +237,15 @@ class Handler(BaseHTTPRequestHandler):
         return self.rfile.read(length) if length else b""
 
     def do_GET(self):
-        if self.path.split("?")[0] in ("/health", "/asu/health"):
-            return self.json_response(200, {"status": "ok", "createai_ready": fallback_ready(self.server),
-                                            **self.server.fallback.state()})
-        if not self.authorized():
-            return self.error_response(401, "Local bridge requires Anthropic authentication.")
-        self.passthrough("GET", None)
+        try:
+            if self.path.split("?")[0] in ("/health", "/asu/health"):
+                return self.json_response(200, {"status": "ok", "createai_ready": fallback_ready(self.server),
+                                                **self.server.fallback.state()})
+            if not self.authorized():
+                return self.error_response(401, "Local bridge requires Anthropic authentication.")
+            self.passthrough("GET", None)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def do_POST(self):
         try:

@@ -184,6 +184,25 @@ class BridgeTests(unittest.TestCase):
         self.assertNotIn("ASU_CREATEAI_TOKEN", env)
         self.assertEqual(env["ASU_BRIDGE_SESSION_TOKEN"], "local-only")
 
+    def test_get_broken_pipe_is_silently_handled(self):
+        from codex_bridge import Handler
+        server = BridgeServer(FakeUpstream([]), "test-only")
+        server.proxy_get = lambda path, headers: (200, b'{"data": []}')
+        handler = Handler.__new__(Handler)
+        handler.server = server
+        handler.headers = {"Authorization": "Bearer test-only"}
+        handler.path = "/v1/models"
+
+        class BrokenWriter:
+            def write(self, data):
+                raise BrokenPipeError(32, "Broken pipe")
+
+        handler.wfile = BrokenWriter()
+        handler.send_response = lambda *args: None
+        handler.send_header = lambda *args: None
+        handler.end_headers = lambda: None
+        handler.do_GET()
+
 
 class CodexIntegration(unittest.TestCase):
     @unittest.skipUnless(os.environ.get("RUN_CODEX_INTEGRATION") == "1", "opt-in local Codex test")
@@ -224,7 +243,7 @@ class CodexIntegration(unittest.TestCase):
                        "--ignore-user-config", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only",
                        "--json", "-C", directory, "Run pwd once, then reply BRIDGE_INTEGRATION_OK."]
             result = subprocess.run(command, env=child_environment("fake-local"), text=True,
-                                    capture_output=True, timeout=50)
+                                    stdin=subprocess.DEVNULL, capture_output=True, timeout=50)
         self.assertEqual(result.returncode, 0, result.stderr[-4000:] + result.stdout[-4000:])
         self.assertIn("BRIDGE_INTEGRATION_OK", result.stdout)
         self.assertTrue(any(m["role"] == "tool" for body in observed for m in body["messages"]), result.stdout)
@@ -233,6 +252,9 @@ class CodexIntegration(unittest.TestCase):
     def test_real_codex_same_session_quota_fallback(self):
         class PrimaryMock:
             count = 0
+
+            def get(self, path, headers):
+                return 200, b'{"data": []}'
 
             def events(self, request, headers):
                 self.count += 1
@@ -256,7 +278,7 @@ class CodexIntegration(unittest.TestCase):
                        "--ignore-user-config", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only",
                        "--json", "-C", directory, "Run pwd once and finish the task."]
             result = subprocess.run(command, env=child_environment("fake-local"), text=True,
-                                    capture_output=True, timeout=50)
+                                    stdin=subprocess.DEVNULL, capture_output=True, timeout=50)
         self.assertEqual(result.returncode, 0, result.stderr[-3000:] + result.stdout[-3000:])
         self.assertEqual(primary.count, 2)
         self.assertIn("FALLBACK_SAME_SESSION_OK", result.stdout)
