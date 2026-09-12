@@ -327,6 +327,9 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def authorized(self):
+        if getattr(self.server, "accept_any_bearer", False):
+            return (not self.headers.get("Origin") and
+                    self.headers.get("Authorization", "").startswith("Bearer "))
         if getattr(self.server, "uses_primary_auth", False):
             return (not self.headers.get("Origin") and
                     self.headers.get("Authorization", "").startswith("Bearer ") and

@@ -96,6 +96,30 @@ RUN_CODEX_INTEGRATION=1 python3 -m unittest -v
 
 程式僅監聽 `127.0.0.1`，每次啟動產生本機認證 token，拒絕有 Origin 的瀏覽器請求，不記錄請求內容或認證。關閉 Codex 時會停止代理。
 
+## macOS 自動啟動與桌面 App
+
+以下安裝器會將 ASU Service token 存入 macOS Keychain，執行 CreateAI 基本 API 與工具接續檢查，接著才備份並更新 `~/.codex/config.toml`。它會安裝使用者層級 LaunchAgent，在你登入 macOS 後啟動背景 bridge；不需要每次貼 token。ASU token 不會寫進 Codex 設定或 LaunchAgent plist。
+
+```sh
+python3 ~/Developer/asu-codex-bridge/setup_macos.py install
+```
+
+安裝成功後，完整結束並重開 ChatGPT/Codex。確認狀態：
+
+```sh
+python3 ~/Developer/asu-codex-bridge/setup_macos.py status
+```
+
+完整移除並還原安裝前的 provider 設定：
+
+```sh
+python3 ~/Developer/asu-codex-bridge/setup_macos.py uninstall
+```
+
+解除安裝預設也刪除 Keychain token；加上 `--keep-token` 可保留。原始設定備份留在 `~/.codex/config.toml.asu-backup-*`，不包含 ASU token。
+
+這是「登入後自動啟動」，因為使用者 Keychain 在登入前不可用。LaunchAgent 若異常退出會由 macOS 重新啟動。固定本機端點為 `127.0.0.1:41117`，只接受沒有瀏覽器 Origin 的 Bearer-authenticated 請求。
+
 ## 參考文件
 
 - [ASU OpenAI-compatible API](https://docs.aiml.asu.edu/openai-compatible.md)

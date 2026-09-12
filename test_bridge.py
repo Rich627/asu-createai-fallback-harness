@@ -162,6 +162,20 @@ class BridgeTests(unittest.TestCase):
                 urllib.request.urlopen(urllib.request.Request(server.base_url.replace("/v1", "/health"), headers=headers))
             self.assertEqual(error.exception.code, 401)
 
+    def test_daemon_auth_accepts_bearer_but_rejects_browser_origin(self):
+        server = BridgeServer(FakeUpstream([]), "not-used")
+        server.accept_any_bearer = True
+        server.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        url = server.base_url.replace("/v1", "/health")
+        with urllib.request.urlopen(urllib.request.Request(url, headers={"Authorization": "Bearer primary"})) as response:
+            self.assertEqual(response.status, 200)
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            urllib.request.urlopen(urllib.request.Request(url, headers={
+                "Authorization": "Bearer primary", "Origin": "https://example.com"}))
+        self.assertEqual(error.exception.code, 401)
+
     def test_asu_token_not_passed_to_codex(self):
         from unittest.mock import patch
         with patch.dict(os.environ, {"ASU_CREATEAI_TOKEN": "test-only"}):
