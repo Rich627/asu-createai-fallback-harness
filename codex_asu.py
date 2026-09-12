@@ -10,9 +10,9 @@ import shutil
 import subprocess
 import sys
 
-from codex_bridge import BridgeServer, response_events
-from createai import BridgeError, Upstream, sse_data
-from codex_router import FallbackServer, Primary
+from asu.codex_bridge import BridgeServer, response_events
+from asu.createai import BridgeError, Upstream, sse_data
+from asu.codex_router import FallbackServer, Primary
 
 ENVIRONMENTS = {
     "production": "https://api-main.aiml.asu.edu/v1",
@@ -193,7 +193,7 @@ def main():
     try:
         upstream = Upstream(ENVIRONMENTS[args.environment], get_token())
         if args.model == "auto" and (args.doctor or args.diagnose):
-            from model_map import resolve
+            from asu.model_map import resolve
             args.model = resolve(args.primary_model, [item["id"] for item in upstream.models().get("data", [])],
                                  "defaults")
             print(f"auto model check resolved to {args.model}", file=sys.stderr)

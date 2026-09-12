@@ -16,7 +16,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: The suite must pass before anything is published
-        run: python -m unittest discover -p 'test_*.py'
+        run: python -m unittest discover -s tests -t . -p 'test_*.py'
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}

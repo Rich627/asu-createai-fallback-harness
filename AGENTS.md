@@ -19,9 +19,10 @@ make one interrupted turn survive a quota wall.
 ## Commands
 
 ```sh
-python3 -m unittest discover -p 'test_*.py' -v      # offline suite, no network, no API calls
-python3 -m unittest test_claude_bridge.EventTest -v # one module or class
-RUN_CODEX_INTEGRATION=1 python3 -m unittest -v      # additionally drives the real Codex CLI
+# Always from the repository root: `asu` and the entry-point scripts must both import.
+python3 -m unittest discover -s tests -t . -p 'test_*.py' -v   # offline, no network, no API calls
+python3 -m unittest tests.test_claude_bridge.EventTest -v      # one module or class
+RUN_CODEX_INTEGRATION=1 python3 -m unittest discover -s tests -t . -v  # also drives the real Codex CLI
 python3 claude_asu.py --doctor                      # live CreateAI check (spends a little quota)
 python3 codex_asu.py --doctor
 python3 setup_claude_macos.py status                # what is installed and which provider is live
@@ -38,16 +39,25 @@ Each client gets a translator plus a router, sharing one CreateAI client and one
 | Layer | Claude Code | Codex |
 |---|---|---|
 | Wire format in | Anthropic Messages | OpenAI Responses |
-| Translator | `anthropic_bridge.py` | `codex_bridge.py` |
-| Primary relay + failover | `claude_router.py` | `codex_router.py` |
+| Translator | `asu/anthropic_bridge.py` | `asu/codex_bridge.py` |
+| Primary relay + failover | `asu/claude_router.py` | `asu/codex_router.py` |
 | Background service | `claude_daemon.py` (41118) | `codex_daemon.py` (41117) |
 | Installer (macOS) | `setup_claude_macos.py` | `setup_codex_macos.py` |
 | Installer (Windows) | `setup_claude_windows.py` | `setup_codex_windows.py` |
 
-`createai.py` is the shared floor under both columns: `Upstream` (the CreateAI client, with 5xx
+Everything above lives in the `asu` package; the repository root holds only the eight entry
+points (two daemons, four installers, two one-off tools). **The dependency runs one way: an entry
+point may import from `asu`, nothing in `asu` may import an entry point.** That keeps the package
+importable on its own, and it is why `ENVIRONMENTS`, `diagnose` and `doctor` still live in
+`codex_asu.py` / `claude_asu.py` at the root rather than being pulled inward — moving them is a
+redesign of those files, not a file move. The daemons deliberately keep their root filenames: an
+installed LaunchAgent stores an absolute path to them, so renaming or moving one breaks every
+existing install until the installer is re-run.
+
+`asu/createai.py` is the shared floor under both columns: `Upstream` (the CreateAI client, with 5xx
 retry), `BridgeError`, `dumps`, `NoRedirect` and SSE parsing. Nothing client-specific belongs in
-it — if a change to `createai.py` only makes sense for one of the two clients, it is in the wrong
-file. `model_map.py` resolves a requested model to its CreateAI counterpart. `keychain.py` reads
+it — if a change to `asu/createai.py` only makes sense for one of the two clients, it is in the wrong
+file. `asu/model_map.py` resolves a requested model to its CreateAI counterpart. `asu/keychain.py` reads
 and writes the token through Security.framework via ctypes.
 
 Platform integration is the other axis, and it is deliberately thin — only two things actually
@@ -55,13 +65,13 @@ differ per platform:
 
 | | macOS | Windows |
 |---|---|---|
-| Credential store | `keychain.py` (Security.framework) | `credvault.py` (advapi32) |
-| Autostart | LaunchAgent plist | scheduled task, `winservice.py` |
+| Credential store | `asu/keychain.py` (Security.framework) | `asu/credvault.py` (advapi32) |
+| Autostart | LaunchAgent plist | scheduled task, `asu/winservice.py` |
 
-`credstore.py` picks the credential backend, so nothing above it branches on `sys.platform`;
-both backends import safely anywhere and refuse to act off their own platform. `installer.py`
+`asu/credstore.py` picks the credential backend, so nothing above it branches on `sys.platform`;
+both backends import safely anywhere and refuse to act off their own platform. `asu/installer.py`
 holds what every installer shares (atomic writes, the health wait, the token round-trip check)
-and `codex_config.py` holds the `config.toml` editing, so a fix lands once instead of four times.
+and `asu/codex_config.py` holds the `config.toml` editing, so a fix lands once instead of four times.
 
 The two clients each keep their own `ToolMap` (`anthropic_bridge` keys by `by_name`,
 `codex_bridge` by `by_original` and supports namespacing). They are deliberately not merged;
@@ -116,7 +126,7 @@ own reset window expires.
   its block by `BEGIN_PREFIX` and writes the longer `BEGIN`, so a block left by an older version
   is still recognized and removed. Never match on the full marker: doing so orphans every block
   written before the text last changed, and the text has already changed twice.
-  `test_codex_config.py` pins both historical spellings.
+  `tests/test_codex_config.py` pins both historical spellings.
 
 ## Verification expectations
 

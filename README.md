@@ -237,8 +237,9 @@ cannot take the client offline.
 ## Tests
 
 ```sh
-python3 -m unittest discover -p 'test_*.py' -v      # offline, no network, no API calls
-RUN_CODEX_INTEGRATION=1 python3 -m unittest -v      # additionally drives the real Codex CLI
+# Run from the repository root, so that `asu` and the entry points both import.
+python3 -m unittest discover -s tests -t . -p 'test_*.py' -v   # offline, no network, no API calls
+RUN_CODEX_INTEGRATION=1 python3 -m unittest discover -s tests -t . -v  # also drives the real Codex CLI
 ```
 
 CI runs the offline suite on macOS, Linux and Windows across Python 3.9, 3.12 and 3.14. The
@@ -247,24 +248,33 @@ run on your own machine does not mean they ran.
 
 ## Layout
 
-| File | Purpose |
+The repository root holds only what you actually run; the implementation is a package. The
+dependency runs one way — an entry point imports from `asu`, never the reverse — so the package
+is importable on its own and the scripts stay thin.
+
+```
+claude_daemon.py  codex_daemon.py        the two background services
+setup_claude_macos.py    setup_codex_macos.py      install / status / uninstall (macOS)
+setup_claude_windows.py  setup_codex_windows.py    install / status / uninstall (Windows)
+claude_asu.py     codex_asu.py           one-off runs and live checks
+asu/                                     the implementation
+tests/                                   the offline suite
+```
+
+| Inside `asu/` | Purpose |
 |---|---|
 | `createai.py` | The CreateAI client and the wire primitives both bridges share |
-| `codex_bridge.py` | Responses → CreateAI translation and the local server (Codex) |
-| `codex_router.py` | Codex primary relay with usage-limit failover |
-| `anthropic_bridge.py` | Messages → CreateAI translation (Claude Code) |
-| `claude_router.py` | Claude primary relay with usage-limit failover |
 | `model_map.py` | Requested model → CreateAI model resolution |
+| `anthropic_bridge.py` | Messages → CreateAI translation (Claude Code) |
+| `codex_bridge.py` | Responses → CreateAI translation and the local server (Codex) |
+| `claude_router.py` | Claude primary relay with usage-limit failover |
+| `codex_router.py` | Codex primary relay with usage-limit failover |
 | `keychain.py` | Native macOS Keychain access, no secret in `argv` |
 | `credvault.py` | Native Windows Credential Manager access, same four functions |
 | `credstore.py` | Picks the credential store for this platform so nothing above it branches |
 | `installer.py` | Installer pieces that are identical on every platform |
 | `codex_config.py` | Reading and editing Codex's `config.toml` |
 | `winservice.py` | Windows scheduled tasks: the LaunchAgent equivalent |
-| `codex_daemon.py`, `claude_daemon.py` | The two background services |
-| `setup_codex_macos.py`, `setup_claude_macos.py` | Install, status, uninstall (macOS) |
-| `setup_codex_windows.py`, `setup_claude_windows.py` | Install, status, uninstall (Windows) |
-| `codex_asu.py`, `claude_asu.py` | One-off runs and live checks |
 
 ## License
 

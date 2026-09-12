@@ -16,9 +16,9 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from anthropic_bridge import DEFAULT_MODEL, message_events
-from createai import BridgeError, NoRedirect, dumps
-from model_map import AUTO, Resolver
+from asu.anthropic_bridge import DEFAULT_MODEL, message_events
+from asu.createai import BridgeError, NoRedirect, dumps
+from asu.model_map import AUTO, Resolver
 
 ANTHROPIC_URL = "https://api.anthropic.com"
 FORCE_FLAG = Path.home() / ".claude" / "asu-fallback-force"

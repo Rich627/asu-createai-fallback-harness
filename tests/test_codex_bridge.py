@@ -9,10 +9,10 @@ import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from codex_bridge import BridgeServer, ToolMap, response_events, translate
-from createai import BridgeError, Upstream, dumps
+from asu.codex_bridge import BridgeServer, ToolMap, response_events, translate
+from asu.createai import BridgeError, Upstream, dumps
 from codex_asu import child_environment, codex_overrides
-from codex_router import FallbackServer, Primary, PrimaryQuota, is_quota
+from asu.codex_router import FallbackServer, Primary, PrimaryQuota, is_quota
 
 
 def stream_bytes(chunks, done=True):
@@ -185,7 +185,7 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(env["ASU_BRIDGE_SESSION_TOKEN"], "local-only")
 
     def test_get_broken_pipe_is_silently_handled(self):
-        from codex_bridge import Handler
+        from asu.codex_bridge import Handler
         server = BridgeServer(FakeUpstream([]), "test-only")
         server.proxy_get = lambda path, headers: (200, b'{"data": []}')
         handler = Handler.__new__(Handler)

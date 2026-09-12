@@ -6,12 +6,12 @@ import threading
 import unittest
 import urllib.request
 
-import anthropic_bridge
-import claude_router
-from anthropic_bridge import ToolMap, message_events, translate
-from model_map import KNOWN_MODELS, Resolver, resolve
-from createai import BridgeError, dumps
-from claude_router import Fallback, PrimaryQuota, RouterServer, is_quota, quota_window
+from asu import anthropic_bridge
+from asu import claude_router
+from asu.anthropic_bridge import ToolMap, message_events, translate
+from asu.model_map import KNOWN_MODELS, Resolver, resolve
+from asu.createai import BridgeError, dumps
+from asu.claude_router import Fallback, PrimaryQuota, RouterServer, is_quota, quota_window
 
 
 def sse(chunks):
@@ -199,7 +199,7 @@ class EventTest(unittest.TestCase):
 
 class RetryTest(unittest.TestCase):
     def upstream(self, statuses):
-        from createai import Upstream
+        from asu.createai import Upstream
         upstream = Upstream("https://example.invalid/v1", "token")
         self.calls = []
 

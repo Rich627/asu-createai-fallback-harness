@@ -5,8 +5,8 @@ try:
 except ModuleNotFoundError:  # Python 3.10 and older
     tomllib = None
 
-import codex_config
-from codex_config import (config_block, managed, remove_block, remove_top_level_key,
+from asu import codex_config
+from asu.codex_config import (config_block, managed, remove_block, remove_top_level_key,
                           top_level_value)
 
 
@@ -64,7 +64,7 @@ apps = true
         self.assertEqual(remove_block(text).strip(), 'model = "x"')
 
     def test_incomplete_block_is_refused_rather_than_guessed(self):
-        from createai import BridgeError
+        from asu.createai import BridgeError
         with self.assertRaises(BridgeError):
             remove_block("a = 1\n" + codex_config.BEGIN + "\n[x]\n")
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import ctypes
 import sys
 
-from createai import BridgeError
+from asu.createai import BridgeError
 
 ERR_NOT_FOUND = -25300
 

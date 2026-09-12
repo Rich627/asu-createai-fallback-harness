@@ -8,13 +8,13 @@ from pathlib import Path
 import threading
 import time
 
-from anthropic_bridge import DEFAULT_MODEL
-from model_map import AUTO
-from createai import BridgeError, Upstream
-from claude_router import ANTHROPIC_URL, Primary, RouterServer
+from asu.anthropic_bridge import DEFAULT_MODEL
+from asu.model_map import AUTO
+from asu.createai import BridgeError, Upstream
+from asu.claude_router import ANTHROPIC_URL, Primary, RouterServer
 from codex_asu import ENVIRONMENTS
-import credstore
-from credstore import load_password, password_exists
+from asu import credstore
+from asu.credstore import load_password, password_exists
 
 KEYCHAIN_SERVICE = "edu.asu.createai.claude-fallback"
 SHARED_SERVICE = "edu.asu.createai.codex-fallback"

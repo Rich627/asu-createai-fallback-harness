@@ -3,8 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import installer
-from createai import BridgeError
+from asu import installer
+from asu.createai import BridgeError
 
 
 class AtomicWriteTests(unittest.TestCase):

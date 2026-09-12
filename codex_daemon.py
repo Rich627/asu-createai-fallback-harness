@@ -6,12 +6,12 @@ import getpass
 import sys
 from pathlib import Path
 
-from createai import BridgeError, Upstream
+from asu.createai import BridgeError, Upstream
 from codex_asu import ENVIRONMENTS
-from codex_router import FallbackServer, Primary
-import credstore
-from credstore import load_password
-from model_map import AUTO
+from asu.codex_router import FallbackServer, Primary
+from asu import credstore
+from asu.credstore import load_password
+from asu.model_map import AUTO
 
 KEYCHAIN_SERVICE = "edu.asu.createai.codex-fallback"
 DEFAULT_PORT = 41117

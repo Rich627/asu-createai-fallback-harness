@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-from createai import BridgeError
+from asu.createai import BridgeError
 
 NAMESPACE = "http://schemas.microsoft.com/windows/2004/02/mit/task"
 

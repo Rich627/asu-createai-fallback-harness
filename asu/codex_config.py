@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from createai import BridgeError
+from asu.createai import BridgeError
 
 BEGIN_PREFIX = "# BEGIN ASU CODEX BRIDGE"
 BEGIN = f"{BEGIN_PREFIX} (managed by asu-unlimited-tokens)"

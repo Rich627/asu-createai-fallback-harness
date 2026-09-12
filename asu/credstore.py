@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import sys
 
-import credvault
-import keychain
-from createai import BridgeError
+from asu import credvault
+from asu import keychain
+from asu.createai import BridgeError
 
 if sys.platform == "darwin":
     _backend = keychain

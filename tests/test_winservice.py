@@ -4,8 +4,7 @@ import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-import winservice
-
+from asu import winservice
 NS = {"t": winservice.NAMESPACE}
 
 
@@ -88,7 +87,7 @@ class TaskXmlTests(unittest.TestCase):
 class PlatformGuardTests(unittest.TestCase):
     @unittest.skipIf(sys.platform == "win32", "the guard is what we are testing")
     def test_schtasks_calls_refuse_off_windows(self):
-        from createai import BridgeError
+        from asu.createai import BridgeError
         for call in (lambda: winservice.task_exists("x"),
                      lambda: winservice.create_task("x", Path("y")),
                      lambda: winservice.start_task("x")):

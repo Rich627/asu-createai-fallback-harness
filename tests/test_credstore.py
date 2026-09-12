@@ -1,10 +1,10 @@
 import sys
 import unittest
 
-import credstore
-import credvault
-import keychain
-from createai import BridgeError
+from asu import credstore
+from asu import credvault
+from asu import keychain
+from asu.createai import BridgeError
 
 SERVICE = "edu.asu.createai.test-credstore"
 ACCOUNT = "asu-bridge-test-account"

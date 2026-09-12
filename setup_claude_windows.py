@@ -16,15 +16,15 @@ import sys
 import time
 from pathlib import Path
 
-import credstore
-import installer
-import winservice
-from anthropic_bridge import DEFAULT_MODEL
+from asu import credstore
+from asu import installer
+from asu import winservice
+from asu.anthropic_bridge import DEFAULT_MODEL
 from claude_asu import doctor
 from claude_daemon import DEFAULT_PORT, KEYCHAIN_SERVICE, SHARED_SERVICE
 from codex_asu import ENVIRONMENTS
-from createai import BridgeError, Upstream
-from model_map import AUTO, KNOWN_MODELS, resolve
+from asu.createai import BridgeError, Upstream
+from asu.model_map import AUTO, KNOWN_MODELS, resolve
 
 TASK = "ASU Claude Bridge"
 ROOT = Path(__file__).resolve().parent

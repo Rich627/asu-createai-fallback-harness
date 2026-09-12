@@ -18,8 +18,8 @@ import time
 import urllib.error
 import urllib.request
 
-import credstore
-from createai import BridgeError
+from asu import credstore
+from asu.createai import BridgeError
 
 
 def account():

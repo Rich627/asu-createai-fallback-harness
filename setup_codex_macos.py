@@ -11,13 +11,13 @@ import subprocess
 import sys
 import time
 
-import codex_config as config
-import credstore
-import installer
-from createai import BridgeError, Upstream
+from asu import codex_config as config
+from asu import credstore
+from asu import installer
+from asu.createai import BridgeError, Upstream
 from codex_asu import ENVIRONMENTS, diagnose, doctor
 from codex_daemon import DEFAULT_PORT, KEYCHAIN_SERVICE
-from model_map import AUTO, KNOWN_MODELS, resolve
+from asu.model_map import AUTO, KNOWN_MODELS, resolve
 
 LABEL = "com.rich.asu-codex-bridge"
 ROOT = Path(__file__).resolve().parent

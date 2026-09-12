@@ -16,14 +16,14 @@ import sys
 import time
 from pathlib import Path
 
-import codex_config as config
-import credstore
-import installer
-import winservice
+from asu import codex_config as config
+from asu import credstore
+from asu import installer
+from asu import winservice
 from codex_asu import ENVIRONMENTS, diagnose, doctor
 from codex_daemon import DEFAULT_PORT, KEYCHAIN_SERVICE
-from createai import BridgeError, Upstream
-from model_map import AUTO, KNOWN_MODELS, resolve
+from asu.createai import BridgeError, Upstream
+from asu.model_map import AUTO, KNOWN_MODELS, resolve
 
 TASK = "ASU Codex Bridge"
 ROOT = Path(__file__).resolve().parent

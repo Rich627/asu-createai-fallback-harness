@@ -6,9 +6,9 @@ import threading
 import urllib.error
 import urllib.request
 
-from codex_bridge import BridgeServer, response_events
-from createai import BridgeError, NoRedirect, dumps, sse_data
-from model_map import AUTO, Resolver
+from asu.codex_bridge import BridgeServer, response_events
+from asu.createai import BridgeError, NoRedirect, dumps, sse_data
+from asu.model_map import AUTO, Resolver
 
 PRIMARY_URLS = {
     "chatgpt": "https://chatgpt.com/backend-api/codex/responses",

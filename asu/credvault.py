@@ -15,7 +15,7 @@ from __future__ import annotations
 import ctypes
 import sys
 
-from createai import BridgeError
+from asu.createai import BridgeError
 
 CRED_TYPE_GENERIC = 1
 CRED_PERSIST_LOCAL_MACHINE = 2
