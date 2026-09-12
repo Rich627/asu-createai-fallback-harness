@@ -253,7 +253,7 @@ def sse_data(response):
         yield "\n".join(data)
 
 
-def response_events(upstream, request):
+def response_events(upstream, request, stats=None):
     body, toolmap = translate(request)
     result = {"id": "resp_" + secrets.token_hex(12), "object": "response",
               "created_at": int(time.time()), "status": "in_progress", "model": body["model"],
@@ -274,6 +274,7 @@ def response_events(upstream, request):
         finish = None
         done = False
         usage = {}
+        metric = {}
         for raw in sse_data(stream):
             if raw == "[DONE]":
                 done = True
@@ -282,6 +283,7 @@ def response_events(upstream, request):
             if chunk.get("error"):
                 raise BridgeError("ASU returned a streaming error.", 502)
             usage = chunk.get("usage") or usage
+            metric = (chunk.get("metadata") or {}).get("usage_metric") or metric
             for choice in chunk.get("choices", []):
                 if choice.get("index", 0) != 0:
                     continue
@@ -334,6 +336,10 @@ def response_events(upstream, request):
                            "total_tokens": usage.get("total_tokens", 0),
                            "input_tokens_details": {"cached_tokens": usage.get("prompt_tokens_details", {}).get("cached_tokens", 0)},
                            "output_tokens_details": {"reasoning_tokens": usage.get("completion_tokens_details", {}).get("reasoning_tokens", 0)}}
+        if stats is not None:
+            stats.update({"input_tokens": result["usage"]["input_tokens"],
+                          "output_tokens": result["usage"]["output_tokens"],
+                          "cost": metric.get("total_token_cost")})
         yield event("response.completed", response=result)
 
 
@@ -385,6 +391,17 @@ class Handler(BaseHTTPRequestHandler):
             return self.json_response(401, {"error": {"message": "Local bridge authentication required."}})
         if self.path == "/health":
             return self.json_response(200, {"status": "ok"})
+        proxy = getattr(self.server, "proxy_get", None)
+        if proxy:
+            try:
+                status, body = proxy(self.path, self.headers)
+            except BridgeError as exc:
+                return self.json_response(exc.status, {"error": {"message": str(exc)}})
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            return self.wfile.write(body)
         self.json_response(404, {"error": {"message": "Unsupported endpoint."}})
 
     def do_POST(self):

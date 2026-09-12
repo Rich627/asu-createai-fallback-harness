@@ -87,13 +87,15 @@ def quota_reason(status, payload):
 
 
 class Fallback:
-    def __init__(self):
+    def __init__(self, forced=False):
         self.until = 0.0
         self.reason = ""
+        self.forced = forced
         self.lock = threading.Lock()
 
     def active(self):
-        if FORCE_FLAG.exists():
+        # FORCE_FLAG is global to the machine; self.forced belongs to this instance only.
+        if self.forced or FORCE_FLAG.exists():
             return True
         return time.time() < self.until
 
@@ -108,11 +110,21 @@ class Fallback:
     def state(self):
         remaining = max(0, int(self.until - time.time()))
         return {"fallback_active": self.active(), "fallback_seconds_remaining": remaining,
-                "forced": FORCE_FLAG.exists(), "reason": self.reason}
+                "forced": self.forced or FORCE_FLAG.exists(), "reason": self.reason}
 
 
 def fallback_ready(server):
     return getattr(server, "upstream", None) is not None
+
+
+def log_usage(model, stats):
+    if not stats:
+        return
+    cost = stats.get("cost")
+    # CreateAI reports cost only on non-streaming replies; tokens are always there.
+    print(f"[{time.strftime('%F %T')}] CreateAI {model}: "
+          f"{stats.get('input_tokens', 0)} in / {stats.get('output_tokens', 0)} out"
+          + (f", ${cost:.4f}" if isinstance(cost, (int, float)) else ""), flush=True)
 
 
 class Primary:
@@ -136,6 +148,11 @@ class Primary:
             payload = error_payload(raw)
             if is_quota(status, payload, lowered):
                 raise PrimaryQuota(quota_window(payload, lowered), quota_reason(status, payload)) from None
+            if status in (402, 429):
+                # Relayed as-is, but recorded: this is how an unknown usage-limit shape is found.
+                print(f"[{time.strftime('%F %T')}] relayed {quota_reason(status, payload)} "
+                      f"without switching; report it if Claude said the usage limit was reached.",
+                      flush=True)
             return status, response_headers, io.BytesIO(raw)
         except (OSError, urllib.error.URLError):
             raise BridgeError("Could not reach api.anthropic.com. No usage-limit fallback was triggered.", 502) from None
@@ -169,12 +186,13 @@ class RouterServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
-    def __init__(self, upstream=None, primary=None, model=AUTO, port=0, address="127.0.0.1"):
+    def __init__(self, upstream=None, primary=None, model=AUTO, port=0, address="127.0.0.1",
+                 forced=False):
         self.upstream = upstream
         self.primary = primary
         self.model = model
         self.resolver = Resolver(lambda: self.upstream, DEFAULT_MODEL)
-        self.fallback = Fallback()
+        self.fallback = Fallback(forced)
         super().__init__((address, port), Handler)
 
     @property
@@ -295,7 +313,8 @@ class Handler(BaseHTTPRequestHandler):
                 raise BridgeError("Invalid Messages request.")
             model = self.server.resolver.target(request.get("model"), self.server.model)
             result = []
-            events = message_events(self.server.upstream, request, model, result)
+            stats = {}
+            events = message_events(self.server.upstream, request, model, result, stats)
             first = next(events)  # Open CreateAI before committing to HTTP 200.
             if request.get("stream"):
                 self.send_response(200)
@@ -311,6 +330,7 @@ class Handler(BaseHTTPRequestHandler):
                 for _ in events:
                     pass
                 self.json_response(200, result[0], {"X-ASU-Fallback": model})
+            log_usage(model, stats)
         except (BrokenPipeError, ConnectionResetError):
             pass
         except Exception as exc:

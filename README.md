@@ -86,11 +86,15 @@ Fully quit and reopen Codex afterwards.
 ### Without installing anything
 
 ```sh
-python3 claude_asu.py --doctor              # live CreateAI check for the Claude path
-python3 claude_asu.py -- -p "hello"         # run Claude Code through a temporary bridge
-python3 codex_asu.py --doctor               # live CreateAI check for the Codex path
-python3 codex_asu.py --auto -- exec "hi"    # run Codex through a temporary bridge
+python3 claude_asu.py --doctor                        # live CreateAI check for the Claude path
+python3 claude_asu.py -- -p "hello"                   # Claude Code through a temporary bridge
+python3 claude_asu.py --force-fallback -- -p "hello"  # that run only, straight to CreateAI
+python3 codex_asu.py --doctor                         # live CreateAI check for the Codex path
+python3 codex_asu.py --auto -- exec "hi"              # Codex through a temporary bridge
 ```
+
+`--force-fallback` belongs to that one temporary bridge, so it is the safe way to try CreateAI
+while other sessions keep using the installed service on its normal path.
 
 ## Model mapping
 
@@ -124,8 +128,13 @@ or the model simply failing a task. Unrecognized errors are relayed with their t
 so a missed pattern is diagnosable from the client's own output.
 
 The window comes from `anthropic-ratelimit-unified-reset` or `retry-after` when present,
-otherwise 30 minutes, capped at 6 hours. To force fallback for a test:
-`touch ~/.claude/asu-fallback-force` (delete it to go back).
+otherwise 30 minutes, capped at 6 hours.
+
+`touch ~/.claude/asu-fallback-force` forces the installed service onto CreateAI — note that this
+is machine-wide and affects every session using it; `--force-fallback` above affects one run.
+
+A 402/429 that is *not* recognized as a usage limit is relayed to the client and recorded in the
+log, so an unknown usage-limit shape can be identified and added rather than silently missed.
 
 ## What the fallback cannot carry
 
@@ -143,6 +152,8 @@ CreateAI is an OpenAI-compatible Chat Completions API, so while it is serving:
 - CreateAI also returns intermittent 5xx, so every upstream call is retried up to three times
   before the client's turn is allowed to fail;
 - token counting is estimated;
+- each fallback turn is logged with its CreateAI model and token counts; CreateAI reports cost
+  only on non-streaming replies, so the dollar figure appears there and not on streamed turns;
 - your CreateAI project's own quota and its 750k tokens/minute rate limit now apply, and each
   fallback request is billed to that project.
 

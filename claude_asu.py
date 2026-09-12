@@ -58,6 +58,9 @@ def main():
     parser = add_arguments(argparse.ArgumentParser(description=__doc__,
                                                   epilog="Claude Code arguments go after --."))
     parser.add_argument("--doctor", action="store_true", help="Run two small live CreateAI requests")
+    parser.add_argument("--force-fallback", action="store_true",
+                        help="Send every request to CreateAI for this run only; the installed "
+                             "service and other sessions are untouched")
     parser.add_argument("claude_args", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     if args.port == DEFAULT_PORT:
@@ -71,8 +74,11 @@ def main():
         binary = shutil.which("claude")
         if not binary:
             raise BridgeError("Claude Code is not installed or not on PATH.")
-        server = build_server(args, token).start()
-        print(f"Claude Code via {server.base_url}; fallback model {args.model}. Quit Claude to stop.",
+        server = build_server(args, token)
+        server.fallback.forced = args.force_fallback
+        server.start()
+        state = "CreateAI only (forced)" if args.force_fallback else "Anthropic, CreateAI on a usage limit"
+        print(f"Claude Code via {server.base_url}; {state}; model {args.model}. Quit Claude to stop.",
               file=sys.stderr)
         environment = dict(os.environ, ANTHROPIC_BASE_URL=server.base_url)
         environment.pop("ASU_CREATEAI_TOKEN", None)

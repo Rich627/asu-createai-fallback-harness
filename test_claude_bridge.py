@@ -316,6 +316,32 @@ class ServerTest(unittest.TestCase):
             server.shutdown()
             server.server_close()
 
+    def test_forcing_one_instance_leaves_the_global_flag_alone(self):
+        upstream = FakeUpstream([text_chunk("forced", "stop"),
+                                 {"choices": [], "usage": {"prompt_tokens": 7, "completion_tokens": 2}}])
+        primary = QuotaPrimary()
+        logged = []
+        original = claude_router.log_usage
+        claude_router.log_usage = lambda model, stats: logged.append(
+            (model, stats.get("input_tokens"), stats.get("output_tokens")))
+        self.addCleanup(setattr, claude_router, "log_usage", original)
+        server = RouterServer(upstream, primary, port=0, forced=True).start()
+        try:
+            payload = dumps({"model": "claude-opus-5", "max_tokens": 16,
+                             "messages": [{"role": "user", "content": "hi"}]}).encode()
+            request = urllib.request.Request(server.base_url + "/v1/messages", data=payload,
+                                             headers={"Authorization": "Bearer sk-ant-test"})
+            with urllib.request.urlopen(request, timeout=10) as response:
+                self.assertEqual(response.headers["X-ASU-Fallback"], "aws/claude5_opus")
+            # Forced instances never touch the primary, and never write the machine-wide flag.
+            self.assertEqual(primary.calls, 0)
+            self.assertEqual(logged, [("aws/claude5_opus", 7, 2)])
+            self.assertFalse(claude_router.FORCE_FLAG.exists())
+            self.assertFalse(RouterServer(upstream, primary, port=0).fallback.active())
+        finally:
+            server.shutdown()
+            server.server_close()
+
     def test_browser_origin_is_rejected(self):
         server = RouterServer(FakeUpstream([]), QuotaPrimary(), port=0).start()
         try:

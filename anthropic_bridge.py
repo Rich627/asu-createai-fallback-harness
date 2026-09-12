@@ -184,7 +184,7 @@ def translate(request, model):
     return body, toolmap
 
 
-def message_events(upstream, request, model, out=None):
+def message_events(upstream, request, model, out=None, stats=None):
     """Yield Anthropic streaming events for one CreateAI chat completion."""
     body, toolmap = translate(request, model)
     message = {"id": "msg_" + secrets.token_hex(12), "type": "message", "role": "assistant",
@@ -197,6 +197,7 @@ def message_events(upstream, request, model, out=None):
         calls = {}
         finish = None
         usage = {}
+        metric = {}
         done = False
         for raw in sse_data(stream):
             if raw == "[DONE]":
@@ -206,6 +207,7 @@ def message_events(upstream, request, model, out=None):
             if chunk.get("error"):
                 raise BridgeError("The fallback provider returned a streaming error.", 502)
             usage = chunk.get("usage") or usage
+            metric = (chunk.get("metadata") or {}).get("usage_metric") or metric
             for choice in chunk.get("choices", []):
                 if choice.get("index", 0) != 0:
                     continue
@@ -274,3 +276,7 @@ def message_events(upstream, request, model, out=None):
         yield {"type": "message_stop"}
     if out is not None:
         out.append(message)
+    if stats is not None:
+        stats.update({"input_tokens": message["usage"]["input_tokens"],
+                      "output_tokens": message["usage"]["output_tokens"],
+                      "cost": metric.get("total_token_cost")})
