@@ -8,6 +8,9 @@ from setup_macos import config_block, port_number, remove_block, remove_top_leve
 
 
 class ConfigEditingTests(unittest.TestCase):
+    def test_install_help_has_keychain_reuse(self):
+        source = Path(setup_macos.__file__).read_text()
+        self.assertIn('"--use-keychain"', source)
     def test_managed_provider_is_valid_toml_with_existing_tables(self):
         original = '''model = "gpt-5.6-sol"
 model_provider = "old"

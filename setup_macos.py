@@ -137,7 +137,12 @@ def bridge_healthy(port, attempts=20):
 def install(args):
     if sys.platform != "darwin":
         raise BridgeError("This installer supports macOS only.")
-    store_token()
+    if args.use_keychain:
+        if not password_exists(KEYCHAIN_SERVICE, getpass.getuser()):
+            raise BridgeError("No saved CreateAI token was found. Run install without --use-keychain once.")
+        print("Using the existing CreateAI token from macOS Keychain.")
+    else:
+        store_token()
     token = load_token()
     print("Testing CreateAI before changing Codex configuration...")
     if not diagnose(Upstream(ENVIRONMENTS[args.environment], token), args.model):
@@ -245,6 +250,8 @@ def main():
     install_parser = sub.add_parser("install")
     install_parser.add_argument("--environment", choices=ENVIRONMENTS, default="production")
     install_parser.add_argument("--model", default="defaults")
+    install_parser.add_argument("--use-keychain", action="store_true",
+                                help="Use the CreateAI token already stored in macOS Keychain")
     install_parser.add_argument("--primary", choices=("chatgpt", "api"), default="chatgpt")
     install_parser.add_argument("--port", type=lambda value: port_number(value), default=DEFAULT_PORT)
     install_parser.set_defaults(function=install)

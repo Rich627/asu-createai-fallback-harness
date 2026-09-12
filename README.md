@@ -106,6 +106,13 @@ python3 ~/Developer/asu-codex-bridge/setup_macos.py install
 
 安裝器只會要求輸入一次 ASU CreateAI Service token，透過 macOS 原生 Keychain API 儲存，然後立刻在記憶體中比對讀回內容。Token 不會出現在程序參數或 shell history。若安裝前測試回傳 403，Codex 設定不會被修改；直接重跑安裝並更新 Keychain 內容即可。
 
+Token 已存入 Keychain 後，可直接重試並指定模型，不需再次貼 token：
+
+```sh
+python3 ~/Developer/asu-codex-bridge/setup_macos.py install \
+  --use-keychain --model openai/gpt6_astra
+```
+
 安裝成功後，完整結束並重開 ChatGPT/Codex。確認狀態：
 
 ```sh
