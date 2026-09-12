@@ -1,10 +1,12 @@
-# CreateAI Fallback Harness
+# asu-unlimited-tokens
 
-Keep working when your coding agent runs out of quota. This is a loopback bridge that
-relays [Claude Code](https://claude.com/claude-code) and [OpenAI Codex](https://developers.openai.com/codex/cli)
-traffic to their normal providers, and — only when it recognizes a usage-limit error —
-continues the *same turn* on [ASU CreateAI](https://ai.asu.edu/ai-tools/createai-platform)
-instead of stopping.
+Keep working when your coding agent runs out of quota — by moving to a second provider you
+already pay for, **not** by circumventing anyone's limit. This is a loopback bridge that relays
+[Claude Code](https://claude.com/claude-code) and [OpenAI Codex](https://developers.openai.com/codex/cli)
+traffic to their normal providers, and — only when it recognizes a usage-limit error — continues
+the *same turn* on your own [ASU CreateAI](https://ai.asu.edu/ai-tools/createai-platform) project
+instead of stopping. Your subscription's limit still applies; CreateAI's quota and rate limits
+then apply in its place.
 
 繁體中文說明：[README.zh-TW.md](README.zh-TW.md)
 

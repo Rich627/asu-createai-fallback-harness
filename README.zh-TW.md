@@ -1,4 +1,4 @@
-# CreateAI Fallback Harness（繁體中文）
+# asu-unlimited-tokens（繁體中文）
 
 英文版與總覽：[README.md](README.md)。以下內容維持原本的開發與驗證紀錄。
 
@@ -20,7 +20,7 @@
 5. 取得 Service token 後，在 Terminal 執行下方檢查。程式會隱藏輸入 token，只保留於記憶體；不要貼到聊天、原始碼或 shell 命令列。
 
 ```sh
-cd ~/Desktop/asu-createai-fallback-harness
+cd ~/Desktop/asu-unlimited-tokens
 python3 codex_asu.py --doctor
 ```
 
@@ -29,7 +29,7 @@ python3 codex_asu.py --doctor
 若遇到 HTTP 500，先做分段診斷：
 
 ```sh
-python3 ~/Desktop/asu-createai-fallback-harness/codex_asu.py --diagnose
+python3 codex_asu.py --diagnose
 ```
 
 依序獨立檢查模型清單、最小文字請求、最小串流請求，以及原生 Responses。模型清單失敗不會阻止後續檢查；每次最多三個小型模型請求。不會輸出 token、回應原文或伺服器內部錯誤內容。請提供各步 PASS/FAIL 資訊。HTTP 500 本身不足以判定 token 有效、模型相容，或服務全面故障。
@@ -43,19 +43,19 @@ python3 ~/Desktop/asu-createai-fallback-harness/codex_asu.py --diagnose
 先測 ASU 模式：
 
 ```sh
-python3 ~/Desktop/asu-createai-fallback-harness/codex_asu.py -- -C /path/to/project
+python3 codex_asu.py -- -C /path/to/project
 ```
 
 主供應商使用 ChatGPT 訂閱登入、額度不足時自動切換：
 
 ```sh
-python3 ~/Desktop/asu-createai-fallback-harness/codex_asu.py --auto -- -C /path/to/project
+python3 codex_asu.py --auto -- -C /path/to/project
 ```
 
 主模型預設 `gpt-6-astra`，ASU 模型預設 `defaults`。可明確指定：
 
 ```sh
-python3 ~/Desktop/asu-createai-fallback-harness/codex_asu.py \
+python3 codex_asu.py \
   --auto --primary-model gpt-6-astra --model 'EXACT_ASU_MODEL_ID' \
   -- -C /path/to/project
 ```
@@ -105,7 +105,7 @@ RUN_CODEX_INTEGRATION=1 python3 -m unittest -v
 以下安裝器會將 ASU Service token 存入 macOS Keychain，執行 CreateAI 基本 API 與工具接續檢查，接著才備份並更新 `~/.codex/config.toml`。它會安裝使用者層級 LaunchAgent，在你登入 macOS 後啟動背景 bridge；不需要每次貼 token。ASU token 不會寫進 Codex 設定或 LaunchAgent plist。
 
 ```sh
-python3 ~/Desktop/asu-createai-fallback-harness/setup_macos.py install
+python3 setup_macos.py install
 ```
 
 安裝器只會要求輸入一次 ASU CreateAI Service token，透過 macOS 原生 Keychain API 儲存，然後立刻在記憶體中比對讀回內容。Token 不會出現在程序參數或 shell history。若安裝前測試回傳 403，Codex 設定不會被修改；直接重跑安裝並更新 Keychain 內容即可。
@@ -113,20 +113,20 @@ python3 ~/Desktop/asu-createai-fallback-harness/setup_macos.py install
 Token 已存入 Keychain 後，可直接重試並指定模型，不需再次貼 token：
 
 ```sh
-python3 ~/Desktop/asu-createai-fallback-harness/setup_macos.py install \
+python3 setup_macos.py install \
   --use-keychain --model openai/gpt6_astra
 ```
 
 安裝成功後，完整結束並重開 ChatGPT/Codex。確認狀態：
 
 ```sh
-python3 ~/Desktop/asu-createai-fallback-harness/setup_macos.py status
+python3 setup_macos.py status
 ```
 
 完整移除並還原安裝前的 provider 設定：
 
 ```sh
-python3 ~/Desktop/asu-createai-fallback-harness/setup_macos.py uninstall
+python3 setup_macos.py uninstall
 ```
 
 解除安裝預設也刪除 Keychain token；加上 `--keep-token` 可保留。原始設定備份留在 `~/.codex/config.toml.asu-backup-*`，不包含 ASU token。
@@ -158,20 +158,20 @@ python3 setup_claude_macos.py install
 安裝後開新的 Claude Code session 才會生效。檢查狀態與目前用哪一邊：
 
 ```sh
-python3 ~/Desktop/asu-createai-fallback-harness/setup_claude_macos.py status
+python3 setup_claude_macos.py status
 ```
 
 移除並還原 `settings.json`：
 
 ```sh
-python3 ~/Desktop/asu-createai-fallback-harness/setup_claude_macos.py uninstall
+python3 setup_claude_macos.py uninstall
 ```
 
 不安裝、只臨時跑一次：
 
 ```sh
-python3 ~/Desktop/asu-createai-fallback-harness/claude_asu.py --doctor          # 只測 CreateAI
-python3 ~/Desktop/asu-createai-fallback-harness/claude_asu.py -- -p "hello"     # 用臨時 port 跑 Claude Code
+python3 claude_asu.py --doctor          # 只測 CreateAI
+python3 claude_asu.py -- -p "hello"     # 用臨時 port 跑 Claude Code
 ```
 
 ### 切換條件

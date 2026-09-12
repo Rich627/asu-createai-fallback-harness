@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Canonical agent instructions for asu-createai-fallback-harness. Read by Codex, Cursor and Kiro directly;
+Canonical agent instructions for asu-unlimited-tokens. Read by Codex, Cursor and Kiro directly;
 by Claude Code via CLAUDE.md and by Agy / Antigravity via GEMINI.md.
 
 Edit this file only — the adapters beside it just import it.
@@ -97,6 +97,6 @@ launchctl kickstart -k gui/$(id -u)/com.rich.asu-claude-bridge
 
 ## Repository
 
-Public: https://github.com/Rich627/asu-createai-fallback-harness (MIT). CI runs the offline
+Public: https://github.com/Rich627/asu-unlimited-tokens (MIT). CI runs the offline
 suite on macOS and Linux across Python 3.9, 3.12 and 3.14 — 3.9 support is real, it is what
 `/usr/bin/python3` provides when Homebrew's python is missing.
