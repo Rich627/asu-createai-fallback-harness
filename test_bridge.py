@@ -265,5 +265,18 @@ class CodexIntegration(unittest.TestCase):
         self.assertEqual(fallback.body["model"], "asu-test")
 
 
+class AdditionalToolsTest(unittest.TestCase):
+    def test_tools_declared_in_an_additional_tools_item(self):
+        request = {"model": "m", "input": [
+            {"type": "additional_tools", "role": "developer", "tools": [
+                {"type": "namespace", "name": "functions", "tools": [
+                    {"type": "custom", "name": "exec", "description": "Run JavaScript"}]}]},
+            {"role": "user", "content": "hi"}]}
+        body, toolmap = translate(request)
+        self.assertEqual(len(body["tools"]), 1)
+        self.assertEqual(toolmap.by_wire[body["tools"][0]["function"]["name"]], ("functions", "exec", "custom"))
+        self.assertEqual([message["role"] for message in body["messages"]], ["user"])
+
+
 if __name__ == "__main__":
     unittest.main()

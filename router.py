@@ -33,8 +33,10 @@ class Primary:
     def events(self, request, incoming):
         # Allow only model API headers; never forward ASU tokens or local bridge auth.
         allowed = {"authorization", "chatgpt-account-id", "openai-organization", "openai-project",
-                   "openai-beta", "originator", "user-agent", "session_id", "conversation_id",
-                   "x-codex-turn-state", "x-codex-turn-metadata"}
+                   "openai-beta", "originator", "user-agent", "session-id", "thread-id",
+                   "conversation_id", "x-client-request-id", "x-codex-window-id",
+                   "x-codex-turn-state", "x-codex-turn-metadata",
+                   "x-openai-internal-codex-responses-lite"}
         headers = {key: value for key, value in incoming.items() if key.lower() in allowed}
         headers.update({"Content-Type": "application/json", "Accept": "text/event-stream"})
         body = {**request, "stream": True}
@@ -51,7 +53,10 @@ class Primary:
                 exc.close()
             if status in (402, 429) and is_quota(payload.get("error")):
                 raise PrimaryQuota() from None
-            raise BridgeError(f"Primary provider HTTP {status}; not a recognized exhausted-quota error. No failover.", status) from None
+            error = payload.get("error") if isinstance(payload.get("error"), dict) else {}
+            detail = f"{error.get('type') or error.get('code') or 'unknown'}: {str(error.get('message', ''))[:160]}"
+            raise BridgeError(f"Primary provider HTTP {status} ({detail}); not a recognized "
+                              f"exhausted-quota error. No failover.", status) from None
         except (OSError, urllib.error.URLError):
             raise BridgeError("Primary connection failed. No quota failover was triggered.", 502) from None
         with response:

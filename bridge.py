@@ -146,10 +146,20 @@ def content_to_chat(content, role):
     return result
 
 
+def collect_tools(request):
+    """Codex also declares tools through additional_tools items, not only the tools array."""
+    tools = list(request.get("tools", []) or [])
+    items = request.get("input", [])
+    for item in items if isinstance(items, list) else []:
+        if isinstance(item, dict) and item.get("type") == "additional_tools":
+            tools.extend(item.get("tools", []) or [])
+    return tools
+
+
 def translate(request):
     if request.get("previous_response_id") or request.get("conversation"):
         raise BridgeError("This bridge requires full input history; server-side conversation IDs are unsupported.")
-    toolmap = ToolMap(request.get("tools", []))
+    toolmap = ToolMap(collect_tools(request))
     messages = []
     if request.get("instructions"):
         messages.append({"role": "system", "content": request["instructions"]})
@@ -177,6 +187,8 @@ def translate(request):
             if not isinstance(output, str):
                 output = dumps(output)
             messages.append({"role": "tool", "tool_call_id": item["call_id"], "content": output})
+        elif kind == "additional_tools":
+            continue
         elif kind == "reasoning":
             # Opaque vendor reasoning is not transferable; visible messages and tool results remain.
             continue

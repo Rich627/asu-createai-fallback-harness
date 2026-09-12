@@ -67,10 +67,14 @@ def child_environment(local_token):
 
 
 def auto_overrides(base_url, model):
-    args = codex_overrides(base_url, model)
-    args += ["-c", "model_providers.asu_bridge.requires_openai_auth=true",
-             "-c", 'model_providers.asu_bridge.env_http_headers={"ASU-Bridge-Key"="ASU_BRIDGE_SESSION_TOKEN"}']
-    return args
+    # env_key would replace the ChatGPT bearer with the local token, so in auto mode the
+    # primary provider stays the only source of Authorization.
+    dropped = ("model_providers.asu_bridge.env_key", "model_providers.asu_bridge.requires_openai_auth")
+    pairs = codex_overrides(base_url, model)
+    args = [part for index in range(0, len(pairs), 2)
+            for part in pairs[index:index + 2] if not pairs[index + 1].startswith(dropped)]
+    return args + ["-c", "model_providers.asu_bridge.requires_openai_auth=true",
+                   "-c", 'model_providers.asu_bridge.env_http_headers={"ASU-Bridge-Key"="ASU_BRIDGE_SESSION_TOKEN"}']
 
 
 def doctor(upstream, model):
