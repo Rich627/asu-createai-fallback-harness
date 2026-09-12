@@ -92,7 +92,8 @@ stream_max_retries = 0
 
 
 def store_token():
-    print("Paste the ASU CreateAI Service token at the Keychain prompt; input is hidden.")
+    print("At BOTH Keychain prompts, paste the SAME ASU CreateAI Service token.")
+    print("Do not enter your Mac login password. Input is hidden.")
     result = run(["/usr/bin/security", "add-generic-password", "-U", "-a", getpass.getuser(),
                   "-s", KEYCHAIN_SERVICE, "-l", "ASU CreateAI Codex fallback",
                   "-T", "/usr/bin/security", "-w"])
