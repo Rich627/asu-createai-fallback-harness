@@ -1,0 +1,26 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "asu": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "ASU Air",
+      "options": {
+        "baseURL": "https://openai.rc.asu.edu/v1"
+      },
+      "models": {
+        "glm-5-3": {
+          "name": "GLM-5-3",
+          "reasoning": true,
+          "tool_call": true,
+          "limit": {
+            "context": 131072,
+            "output": 16384
+          }
+        }
+      }
+    }
+  },
+  "model": "asu/glm-5-3",
+  "small_model": "asu/glm-5-3",
+  "share": "disabled"
+}
