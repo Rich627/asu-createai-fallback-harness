@@ -3,27 +3,21 @@
 
 import argparse
 import getpass
-import subprocess
 import sys
 
 from bridge import BridgeError, Upstream
 from codex_asu import ENVIRONMENTS
 from router import FallbackServer, Primary
+from keychain import load_password
 
 KEYCHAIN_SERVICE = "edu.asu.createai.codex-fallback"
 DEFAULT_PORT = 41117
 
 
 def keychain_token():
-    result = subprocess.run(
-        ["/usr/bin/security", "find-generic-password", "-w", "-a", getpass.getuser(),
-         "-s", KEYCHAIN_SERVICE],
-        capture_output=True,
-        check=False,
-    )
-    token = result.stdout.decode().strip()
-    if result.returncode or not token:
-        raise BridgeError("CreateAI token was not found in macOS Keychain.")
+    token = load_password(KEYCHAIN_SERVICE, getpass.getuser()).strip()
+    if not token:
+        raise BridgeError("CreateAI token in macOS Keychain is empty.")
     return token
 
 

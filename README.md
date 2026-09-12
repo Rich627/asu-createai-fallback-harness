@@ -104,7 +104,7 @@ RUN_CODEX_INTEGRATION=1 python3 -m unittest -v
 python3 ~/Developer/asu-codex-bridge/setup_macos.py install
 ```
 
-macOS `security` 會顯示 `password data for new item` 與 `retype password for new item`。兩次都貼同一支 ASU CreateAI Service token，不是 Mac 登入密碼。若安裝前測試回傳 403，Codex 設定不會被修改；直接重跑安裝並更新 Keychain 內容即可。
+安裝器只會要求輸入一次 ASU CreateAI Service token，透過 macOS 原生 Keychain API 儲存，然後立刻在記憶體中比對讀回內容。Token 不會出現在程序參數或 shell history。若安裝前測試回傳 403，Codex 設定不會被修改；直接重跑安裝並更新 Keychain 內容即可。
 
 安裝成功後，完整結束並重開 ChatGPT/Codex。確認狀態：
 

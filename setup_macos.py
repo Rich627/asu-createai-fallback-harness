@@ -3,6 +3,7 @@
 
 import argparse
 import getpass
+import hmac
 import json
 import os
 from pathlib import Path
@@ -17,6 +18,7 @@ import urllib.request
 from bridge import BridgeError, Upstream
 from codex_asu import ENVIRONMENTS, diagnose, doctor
 from daemon import DEFAULT_PORT, KEYCHAIN_SERVICE
+from keychain import delete_password, load_password, password_exists, save_password
 
 LABEL = "com.rich.asu-codex-bridge"
 BEGIN = "# BEGIN ASU CODEX BRIDGE (managed by setup_macos.py)"
@@ -92,21 +94,19 @@ stream_max_retries = 0
 
 
 def store_token():
-    print("At BOTH Keychain prompts, paste the SAME ASU CreateAI Service token.")
-    print("Do not enter your Mac login password. Input is hidden.")
-    result = run(["/usr/bin/security", "add-generic-password", "-U", "-a", getpass.getuser(),
-                  "-s", KEYCHAIN_SERVICE, "-l", "ASU CreateAI Codex fallback",
-                  "-T", "/usr/bin/security", "-w"])
-    if result.returncode:
-        raise BridgeError("The token was not saved to macOS Keychain.")
+    print("Paste the ASU CreateAI Service token once; input is hidden.")
+    token = getpass.getpass("ASU Service token: ").strip()
+    if not token or "\n" in token or "\r" in token:
+        raise BridgeError("A valid ASU Service token is required.")
+    save_password(KEYCHAIN_SERVICE, getpass.getuser(), token)
+    saved = load_token()
+    if not hmac.compare_digest(saved, token):
+        raise BridgeError("The token read back from Keychain did not match the entered token.")
+    print("Keychain round-trip verification: PASS")
 
 
 def load_token():
-    result = run(["/usr/bin/security", "find-generic-password", "-w", "-a", getpass.getuser(),
-                  "-s", KEYCHAIN_SERVICE], capture_output=True)
-    if result.returncode:
-        raise BridgeError("CreateAI token is missing from macOS Keychain.")
-    return result.stdout.decode().strip()
+    return load_password(KEYCHAIN_SERVICE, getpass.getuser()).strip()
 
 
 def launchctl(action):
@@ -205,15 +205,16 @@ def uninstall(args):
     if STATE.exists():
         STATE.unlink()
     if not args.keep_token:
-        run(["/usr/bin/security", "delete-generic-password", "-a", getpass.getuser(),
-             "-s", KEYCHAIN_SERVICE], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        delete_password(KEYCHAIN_SERVICE, getpass.getuser())
     print("Removed. Fully quit and reopen ChatGPT/Codex.")
 
 
 def status(_args):
     configured = CONFIG.exists() and BEGIN in CONFIG.read_text()
-    token = run(["/usr/bin/security", "find-generic-password", "-a", getpass.getuser(),
-                 "-s", KEYCHAIN_SERVICE], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+    try:
+        token = password_exists(KEYCHAIN_SERVICE, getpass.getuser())
+    except BridgeError:
+        token = False
     service = run(["/bin/launchctl", "print", f"gui/{os.getuid()}/{LABEL}"],
                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
     healthy = False
