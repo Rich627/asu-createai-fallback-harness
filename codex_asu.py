@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import sys
 
-from bridge import BridgeError, BridgeServer, Upstream, response_events
+from bridge import BridgeError, BridgeServer, Upstream, response_events, sse_data
 from router import FallbackServer, Primary
 
 ENVIRONMENTS = {
@@ -74,6 +74,7 @@ def auto_overrides(base_url, model):
 
 
 def doctor(upstream, model):
+    print("[1/3] GET /models", flush=True)
     models = upstream.models()
     ids = [item["id"] for item in models.get("data", [])]
     print("API authentication OK. Available model IDs:")
@@ -86,6 +87,7 @@ def doctor(upstream, model):
                            "required": ["marker"], "additionalProperties": False}}
     request = {"model": model, "input": "Call connection_check with marker ASU_OK.",
                "tools": [tool], "tool_choice": {"type": "function", "name": "connection_check"}}
+    print("[2/3] Streaming tool call via /chat/completions", flush=True)
     events = list(response_events(upstream, request))
     output = events[-1]["response"]["output"]
     calls = [item for item in output if item["type"] == "function_call"]
@@ -96,10 +98,74 @@ def doctor(upstream, model):
                                   "output": "ASU_OK"} for item in calls],
                         {"role": "user", "content": "Reply with ASU_OK only. Do not call tools."}]
     request["tool_choice"] = "none"
+    print("[3/3] Tool-result follow-up via /chat/completions", flush=True)
     final = list(response_events(upstream, request))[-1]["response"]
     if not any("ASU_OK" in part.get("text", "") for item in final["output"] for part in item.get("content", [])):
         raise BridgeError("The model did not complete the tool-result round trip.")
     print("PASS: streaming, function call, tool result, and follow-up response.")
+
+
+def diagnose(upstream, model):
+    """Probe independently: a broken /models must not prevent a minimal chat test."""
+    print(f"Diagnostic target: {upstream.base_url}; model={model}", flush=True)
+    print("No tokens, response bodies, or model-generated text will be printed.", flush=True)
+    results = []
+
+    def probe(label, check):
+        print(label, flush=True)
+        try:
+            check()
+            print("  PASS", flush=True)
+            results.append(True)
+        except Exception as exc:
+            message = str(exc) if isinstance(exc, BridgeError) else "Unexpected response format or connection failure."
+            print("  FAIL: " + message, flush=True)
+            results.append(False)
+
+    def models():
+        value = upstream.models()
+        entries = value.get("data")
+        if not isinstance(entries, list):
+            raise BridgeError("The model list is not in the expected format.")
+        print(f"  Available models: {len(entries)}", flush=True)
+        if model != "defaults":
+            print(f"  Selected model listed: {any(item.get('id') == model for item in entries)}", flush=True)
+
+    basic = {"model": model, "messages": [{"role": "user", "content": "Reply with ASU_OK only."}]}
+
+    def chat():
+        with upstream.open("/chat/completions", basic) as response:
+            value = json.load(response)
+        if not value.get("choices", [{}])[0].get("message", {}).get("content"):
+            raise BridgeError("No text in the Chat Completions response.")
+
+    def stream():
+        content = False
+        completed = False
+        with upstream.open("/chat/completions", {**basic, "stream": True}) as response:
+            for data in sse_data(response):
+                if data == "[DONE]":
+                    completed = True
+                    break
+                value = json.loads(data)
+                if value.get("error"):
+                    raise BridgeError("ASU returned an error inside the stream.")
+                content |= any(c.get("delta", {}).get("content") for c in value.get("choices", []))
+        if not content or not completed:
+            raise BridgeError("No text or no completion marker in the stream.")
+
+    def responses():
+        with upstream.open("/responses", {"model": model, "input": "Reply with ASU_OK only."}) as response:
+            value = json.load(response)
+        if value.get("error") or not any(part.get("text") for item in value.get("output", []) for part in item.get("content", [])):
+            raise BridgeError("No text in the Responses result, or an API error was returned.")
+
+    probe("[1/4] GET /models", models)
+    probe("[2/4] Minimal POST /chat/completions (no tools or extra parameters)", chat)
+    probe("[3/4] Minimal streaming POST /chat/completions", stream)
+    probe("[4/4] Minimal POST /responses", responses)
+    print("Diagnostic complete. Share the PASS/FAIL lines; do not share your token.", flush=True)
+    return all(results)
 
 
 def main():
@@ -108,6 +174,7 @@ def main():
     parser.add_argument("--model", default=os.environ.get("ASU_MODEL", "defaults"),
                         help="Exact ASU model ID, or defaults for the Builder project's model")
     parser.add_argument("--doctor", action="store_true", help="List models and run two small live model requests")
+    parser.add_argument("--diagnose", action="store_true", help="Probe models, basic chat, streaming, and Responses independently (three small model requests)")
     parser.add_argument("--auto", action="store_true", help="Use the primary provider until a recognized quota error, then ASU")
     parser.add_argument("--primary", choices=("chatgpt", "api"), default="chatgpt")
     parser.add_argument("--primary-model", default="gpt-6-astra")
@@ -118,6 +185,8 @@ def main():
         remaining = remaining[1:]
     try:
         upstream = Upstream(ENVIRONMENTS[args.environment], get_token())
+        if args.diagnose:
+            return 0 if diagnose(upstream, args.model) else 1
         if args.doctor:
             doctor(upstream, args.model)
             return 0

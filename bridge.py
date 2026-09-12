@@ -54,7 +54,7 @@ class Upstream:
                       404: "Check the ASU environment and model ID.",
                       429: "ASU quota or rate limit reached; wait or contact ASU."}.get(
                           status, "Check ASU model compatibility and service status.")
-            raise BridgeError(f"ASU HTTP {status}. {advice}", status) from None
+            raise BridgeError(f"ASU HTTP {status} at {path}. {advice}", status) from None
         except (OSError, urllib.error.URLError):
             raise BridgeError("ASU connection failed or timed out.", 502) from None
 

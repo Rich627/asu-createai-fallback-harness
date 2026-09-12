@@ -22,6 +22,16 @@ python3 codex_asu.py --doctor
 
 這會列出此 token 可用的 model ID，並進行兩個小型模型請求，驗證串流、function call、工具結果與接續回覆。會消耗少量 ASU 額度。如果專案在 beta 或 POC，使用 `--environment beta` 或 `--environment poc`。
 
+若遇到 HTTP 500，先做分段診斷：
+
+```sh
+python3 ~/Developer/asu-codex-bridge/codex_asu.py --diagnose
+```
+
+依序獨立檢查模型清單、最小文字請求、最小串流請求，以及原生 Responses。模型清單失敗不會阻止後續檢查；每次最多三個小型模型請求。不會輸出 token、回應原文或伺服器內部錯誤內容。請提供各步 PASS/FAIL 資訊。HTTP 500 本身不足以判定 token 有效、模型相容，或服務全面故障。
+
+2026-09-11 查閱的 ASU 文件已新增 `/v1/responses` 支援，和最初開發時的文件不同；此診斷會確認你所使用環境的實際支援狀態。基本 Responses 測試成功仍不代表完整 Codex 工具或自動接續已通過。
+
 ## Codex CLI 使用方式
 
 需要 Python 3.10+ 與已安裝的 Codex CLI。無第三方 Python 套件。
