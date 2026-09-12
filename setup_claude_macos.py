@@ -30,6 +30,14 @@ PLIST = Path.home() / "Library" / "LaunchAgents" / f"{LABEL}.plist"
 LOG = Path.home() / "Library" / "Logs" / "ASUClaudeBridge.log"
 
 
+def interpreter():
+    """Prefer a path that survives Python upgrades; the agent must come back after every reboot."""
+    for candidate in ("/opt/homebrew/bin/python3", "/usr/local/bin/python3", sys.executable, "/usr/bin/python3"):
+        if candidate and Path(candidate).exists():
+            return candidate
+    return sys.executable
+
+
 def atomic_write(path, data, mode=0o600):
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
@@ -118,7 +126,7 @@ def install(args):
                           "Remove it first so nothing of yours is overwritten.")
     plist = {
         "Label": LABEL,
-        "ProgramArguments": [sys.executable, str(ROOT / "claude_daemon.py"),
+        "ProgramArguments": [interpreter(), str(ROOT / "claude_daemon.py"),
                              "--environment", args.environment, "--model", args.model,
                              "--haiku-model", args.haiku_model, "--port", str(args.port)],
         "RunAtLoad": True,
