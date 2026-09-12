@@ -12,7 +12,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from asu.codex_bridge import BridgeServer, ToolMap, response_events, translate
 from asu.createai import BridgeError, Upstream, dumps
 from codex_asu import child_environment, codex_overrides
-from asu.codex_router import FallbackServer, Primary, PrimaryQuota, is_quota
+from asu.codex_router import (DEFAULT_WINDOW, Fallback, FallbackServer, Primary,
+                              PrimaryQuota, is_quota, quota_window)
 
 
 def stream_bytes(chunks, done=True):
@@ -110,6 +111,72 @@ class BridgeTests(unittest.TestCase):
         self.assertFalse(hasattr(upstream, "body"))
         self.assertTrue(server.fallback_active.is_set())
 
+    def test_quota_window_parsing(self):
+        self.assertEqual(quota_window({"error": {"resets_after": 300}}, {}), 300)
+        self.assertEqual(quota_window({}, {"retry-after": "120"}), 120)
+        self.assertEqual(quota_window({}, {"x-ratelimit-reset-requests": "450"}), 450)
+        self.assertEqual(quota_window({}, {}), DEFAULT_WINDOW)
+
+    def test_fallback_resets_after_window_expires_and_retries_primary(self):
+        class RecoverablePrimary:
+            def __init__(self):
+                self.count = 0
+                self.recovered = False
+
+            def events(self, request, headers):
+                self.count += 1
+                if not self.recovered:
+                    raise PrimaryQuota(seconds=1800)
+                yield {"type": "response.completed", "response": {"status": "completed", "output": []}}
+
+        primary = RecoverablePrimary()
+        upstream = FakeUpstream([chunk({"content": "from-asu"}, "stop")])
+        server = FallbackServer(upstream, "test", primary, "asu/model")
+        self.addCleanup(server.server_close)
+
+        # First request: primary quota fails, routes to ASU
+        request = {"model": "primary/model", "input": [{"role": "user", "content": "hello"}]}
+        list(server.events(request, {}))
+        self.assertEqual(primary.count, 1)
+        self.assertTrue(server.fallback_active.is_set())
+        self.assertEqual(upstream.body["model"], "asu/model")
+
+        # Second request before expiration: stays on ASU, primary not called
+        list(server.events(request, {}))
+        self.assertEqual(primary.count, 1)
+
+        # Quota window expires (simulate time passing) and primary recovers
+        server.fallback.until = 0.0
+        self.assertFalse(server.fallback_active.is_set())
+        primary.recovered = True
+
+        # Third request: tries primary, primary succeeds, upstream is not called again
+        del upstream.body
+        events = list(server.events(request, {}))
+        self.assertEqual(primary.count, 2)
+        self.assertFalse(hasattr(upstream, "body"))
+        self.assertEqual(events[0]["type"], "response.completed")
+
+    def test_health_endpoint_reports_fallback_state(self):
+        server = FallbackServer(FakeUpstream([]), "secret", Primary("api"))
+        server.accept_any_bearer = True
+        server.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        url = server.base_url.replace("/v1", "/health")
+        req = urllib.request.Request(url, headers={"Authorization": "Bearer any"})
+        with urllib.request.urlopen(req) as resp:
+            data = json.load(resp)
+            self.assertEqual(data["status"], "ok")
+            self.assertFalse(data["fallback_active"])
+
+        server.fallback.set(PrimaryQuota(seconds=600, reason="test limit"))
+        with urllib.request.urlopen(req) as resp:
+            data = json.load(resp)
+            self.assertTrue(data["fallback_active"])
+            self.assertGreater(data["fallback_seconds_remaining"], 0)
+            self.assertEqual(data["reason"], "test limit")
+
     def test_text_stream_and_usage(self):
         upstream = FakeUpstream([chunk({"content": "繁體"}), chunk({"content": "中文"}, "stop"),
                                  {"choices": [], "usage": {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12}}])
@@ -128,9 +195,22 @@ class BridgeTests(unittest.TestCase):
         events = list(response_events(FakeUpstream(chunks), {"model": "defaults", "input": "edit", "tools": tools}))
         output = events[-1]["response"]["output"][0]
         self.assertEqual((output["type"], output["namespace"], output["input"]), ("custom_tool_call", "functions", "patch"))
+        self.assertTrue(output["id"].startswith("ctc_"))
         body, _ = translate({"model": "defaults", "tools": tools, "input": [output,
                              {"type": "custom_tool_call_output", "call_id": "call_1", "output": "success"}]})
         self.assertEqual(body["messages"][1], {"role": "tool", "tool_call_id": "call_1", "content": "success"})
+
+    def test_sanitize_for_primary_rewrites_custom_tool_call_id(self):
+        from asu.codex_router import sanitize_for_primary
+        request = {"model": "gpt-5", "input": [
+            {"type": "message", "id": "msg_123", "role": "user", "content": "hi"},
+            {"type": "function_call", "id": "fc_123", "call_id": "c1", "name": "f"},
+            {"type": "custom_tool_call", "id": "fc_a4186fba75af3dd31e43a6d1", "call_id": "c2", "name": "custom"}
+        ]}
+        cleaned = sanitize_for_primary(request)
+        self.assertEqual(cleaned["input"][0]["id"], "msg_123")
+        self.assertEqual(cleaned["input"][1]["id"], "fc_123")
+        self.assertEqual(cleaned["input"][2]["id"], "ctc_a4186fba75af3dd31e43a6d1")
 
     def test_multiple_calls_group_into_one_assistant_message(self):
         body, _ = translate({"model": "defaults", "input": [

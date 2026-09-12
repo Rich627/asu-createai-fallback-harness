@@ -144,19 +144,25 @@ def status(_args):
         token = False
     service = run(["/bin/launchctl", "print", f"gui/{os.getuid()}/{LABEL}"],
                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
-    healthy = False
     port = DEFAULT_PORT
     if config.STATE.exists():
         try:
             port = int(json.loads(config.STATE.read_text()).get("port", DEFAULT_PORT))
         except (ValueError, json.JSONDecodeError):
             pass
-    healthy = installer.bridge_healthy(port, attempts=2)
+    state = installer.bridge_state(port, attempts=2)
+    healthy = state is not None
     print(f"Config: {'installed' if configured else 'not installed'}")
     print(f"{credstore.BACKEND} token: {'present' if token else 'missing'}")
     print(f"LaunchAgent: {'loaded' if service else 'not loaded'}")
     print(f"Bridge health: {'ok' if healthy else 'unavailable'}")
-    return configured and token and service and healthy
+    if state:
+        remaining = state.get("fallback_seconds_remaining", 0)
+        print(f"Current provider: {'CreateAI fallback' if state.get('fallback_active') else 'Codex (chatgpt.com)'}"
+              + (f", {remaining // 60} min left" if remaining else ""))
+        if state.get("reason"):
+            print(f"Last usage-limit error: {state['reason']}")
+    return bool(configured and token and service and healthy)
 
 
 def main():

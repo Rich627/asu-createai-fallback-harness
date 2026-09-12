@@ -64,7 +64,8 @@ class ToolMap:
         if fn["name"] not in self.by_wire:
             raise BridgeError("ASU returned an unrecognized tool name.", 502)
         namespace, name, kind = self.by_wire[fn["name"]]
-        result = {"type": "custom_tool_call" if kind == "custom" else "function_call", "id": "fc_" + secrets.token_hex(12),
+        prefix = "ctc_" if kind == "custom" else "fc_"
+        result = {"type": "custom_tool_call" if kind == "custom" else "function_call", "id": prefix + secrets.token_hex(12),
                   "call_id": call["id"], "name": name, "status": "completed"}
         if namespace:
             result["namespace"] = namespace
@@ -315,7 +316,9 @@ class Handler(BaseHTTPRequestHandler):
             if not self.authorized():
                 return self.json_response(401, {"error": {"message": "Local bridge authentication required."}})
             if self.path == "/health":
-                return self.json_response(200, {"status": "ok"})
+                health = getattr(self.server, "health_state", None)
+                payload = health() if callable(health) else {"status": "ok"}
+                return self.json_response(200, payload)
             proxy = getattr(self.server, "proxy_get", None)
             if proxy:
                 try:

@@ -132,12 +132,19 @@ def status(_args):
         except (ValueError, json.JSONDecodeError):
             pass
     registered = winservice.task_exists(TASK)
-    healthy = installer.bridge_healthy(port, attempts=2)
+    state = installer.bridge_state(port, attempts=2)
+    healthy = state is not None
     print(f"Config: {'installed' if configured else 'not installed'}")
     print(f"{credstore.BACKEND} token: {'present' if token else 'missing'}")
     print(f"Scheduled task: {'registered' if registered else 'not registered'}")
     print(f"Bridge health: {'ok' if healthy else 'unavailable'}")
-    return configured and token and registered and healthy
+    if state:
+        remaining = state.get("fallback_seconds_remaining", 0)
+        print(f"Current provider: {'CreateAI fallback' if state.get('fallback_active') else 'Codex (chatgpt.com)'}"
+              + (f", {remaining // 60} min left" if remaining else ""))
+        if state.get("reason"):
+            print(f"Last usage-limit error: {state['reason']}")
+    return bool(configured and token and registered and healthy)
 
 
 def main():
