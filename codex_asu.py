@@ -89,8 +89,9 @@ def doctor(upstream, model):
     tool = {"type": "function", "name": "connection_check", "description": "Echo a test marker.",
             "parameters": {"type": "object", "properties": {"marker": {"type": "string"}},
                            "required": ["marker"], "additionalProperties": False}}
-    request = {"model": model, "input": "Call connection_check with marker ASU_OK.",
-               "tools": [tool], "tool_choice": {"type": "function", "name": "connection_check"}}
+    # Forced tool_choice is rejected by CreateAI's OpenAI-hosted models, so ask in the prompt.
+    request = {"model": model, "input": "Call connection_check with marker ASU_OK. Do not answer in text.",
+               "tools": [tool], "tool_choice": "auto"}
     print("[2/3] Streaming tool call via /chat/completions", flush=True)
     events = list(response_events(upstream, request))
     output = events[-1]["response"]["output"]
@@ -101,7 +102,6 @@ def doctor(upstream, model):
                         *output, *[{"type": "function_call_output", "call_id": item["call_id"],
                                   "output": "ASU_OK"} for item in calls],
                         {"role": "user", "content": "Reply with ASU_OK only. Do not call tools."}]
-    request["tool_choice"] = "none"
     print("[3/3] Tool-result follow-up via /chat/completions", flush=True)
     final = list(response_events(upstream, request))[-1]["response"]
     if not any("ASU_OK" in part.get("text", "") for item in final["output"] for part in item.get("content", [])):

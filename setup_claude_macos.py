@@ -22,6 +22,7 @@ from claude_asu import doctor
 from claude_daemon import DEFAULT_PORT, KEYCHAIN_SERVICE, SHARED_SERVICE
 from codex_asu import ENVIRONMENTS
 from keychain import delete_password, load_password, password_exists, save_password
+from setup_macos import interpreter
 
 LABEL = "com.rich.asu-claude-bridge"
 ROOT = Path(__file__).resolve().parent
@@ -29,14 +30,6 @@ SETTINGS = Path.home() / ".claude" / "settings.json"
 STATE = Path.home() / ".claude" / "asu-claude-bridge-state.json"
 PLIST = Path.home() / "Library" / "LaunchAgents" / f"{LABEL}.plist"
 LOG = Path.home() / "Library" / "Logs" / "ASUClaudeBridge.log"
-
-
-def interpreter():
-    """Prefer a path that survives Python upgrades; the agent must come back after every reboot."""
-    for candidate in ("/opt/homebrew/bin/python3", "/usr/local/bin/python3", sys.executable, "/usr/bin/python3"):
-        if candidate and Path(candidate).exists():
-            return candidate
-    return sys.executable
 
 
 def atomic_write(path, data, mode=0o600):

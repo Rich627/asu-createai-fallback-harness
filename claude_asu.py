@@ -32,9 +32,10 @@ def doctor(upstream, model):
     if model not in ids:
         raise BridgeError(f"{model} is not in this token's model list ({len(ids)} models available).")
     print(f"Authentication OK; {model} is available.")
-    request = {"model": model, "max_tokens": 1024, "tools": [TOOL],
-               "tool_choice": {"type": "tool", "name": "connection_check"},
-               "messages": [{"role": "user", "content": f"Call connection_check with marker {MARKER}."}]}
+    # Forced tool_choice is rejected by CreateAI's OpenAI-hosted models, so ask in the prompt.
+    request = {"model": model, "max_tokens": 1024, "tools": [TOOL], "tool_choice": {"type": "auto"},
+               "messages": [{"role": "user", "content": f"Call connection_check with marker {MARKER}. "
+                                                        f"Do not answer in text."}]}
     print("[2/3] Streaming tool call", flush=True)
     message = run_message(upstream, request, model)
     calls = [block for block in message["content"] if block["type"] == "tool_use"]
@@ -46,7 +47,6 @@ def doctor(upstream, model):
         {"role": "user", "content": [{"type": "tool_result", "tool_use_id": call["id"], "content": MARKER}
                                      for call in calls] +
                                     [{"type": "text", "text": f"Reply with {MARKER} only. Do not call tools."}]}]
-    request["tool_choice"] = {"type": "none"}
     final = run_message(upstream, request, model)
     if not any(MARKER in block.get("text", "") for block in final["content"]):
         raise BridgeError("The model did not complete the tool-result round trip.")

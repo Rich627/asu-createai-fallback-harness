@@ -31,6 +31,15 @@ PLIST = Path.home() / "Library" / "LaunchAgents" / f"{LABEL}.plist"
 LOG = Path.home() / "Library" / "Logs" / "ASUCodexBridge.log"
 
 
+def interpreter():
+    """One stable interpreter for both agents: a Keychain item's ACL trusts binaries, so a
+    different python would make macOS prompt for the token on every service start."""
+    for candidate in ("/opt/homebrew/bin/python3", "/usr/local/bin/python3", sys.executable, "/usr/bin/python3"):
+        if candidate and Path(candidate).exists():
+            return candidate
+    return sys.executable
+
+
 def run(command, **kwargs):
     return subprocess.run(command, check=False, **kwargs)
 
@@ -131,7 +140,7 @@ def launchctl(action):
         run(["/bin/launchctl", "kickstart", "-k", f"{domain}/{LABEL}"])
 
 
-def bridge_healthy(port, attempts=20):
+def bridge_healthy(port, attempts=40, delay=0.25):
     for _ in range(attempts):
         try:
             req = urllib.request.Request(f"http://127.0.0.1:{port}/health",
@@ -140,7 +149,7 @@ def bridge_healthy(port, attempts=20):
                 if response.status == 200:
                     return True
         except (OSError, urllib.error.URLError):
-            time.sleep(0.1)
+            time.sleep(delay)
     return False
 
 
@@ -183,7 +192,7 @@ def install(args):
 
     plist = {
         "Label": LABEL,
-        "ProgramArguments": [sys.executable, str(ROOT / "daemon.py"), "--environment", args.environment,
+        "ProgramArguments": [interpreter(), str(ROOT / "daemon.py"), "--environment", args.environment,
                              "--model", args.model, "--primary", args.primary, "--port", str(args.port)],
         "RunAtLoad": True,
         "KeepAlive": True,
@@ -245,7 +254,7 @@ def status(_args):
             port = int(json.loads(STATE.read_text()).get("port", DEFAULT_PORT))
         except (ValueError, json.JSONDecodeError):
             pass
-    healthy = bridge_healthy(port, attempts=1)
+    healthy = bridge_healthy(port, attempts=2)
     print(f"Config: {'installed' if configured else 'not installed'}")
     print(f"Keychain token: {'present' if token else 'missing'}")
     print(f"LaunchAgent: {'loaded' if service else 'not loaded'}")
