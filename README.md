@@ -136,3 +136,61 @@ python3 ~/Developer/asu-codex-bridge/setup_macos.py uninstall
 - [ASU rate limits](https://docs.aiml.asu.edu/limits.md)
 - [Codex custom providers](https://learn.chatgpt.com/docs/config-file/config-advanced)
 - [Codex authentication](https://learn.chatgpt.com/docs/auth)
+
+## Claude Code（Anthropic 訂閱）自動 fallback
+
+同一個 CreateAI token 也可以接 Claude Code：本機端點先把請求原樣轉給 `api.anthropic.com`，辨識到訂閱額度用盡時，改用 CreateAI 的 `aws/claude5_opus` 在同一個 session、同一輪對話繼續，工具定義與既有工具結果一起帶過去。
+
+**狀態：翻譯層、額度切換與 Claude Code 端到端（強制 fallback，含工具執行）已在本機實測通過；真實額度耗盡的觸發字串尚未在線上遇過，偵測規則見下。**
+
+### 安裝
+
+```sh
+python3 ~/Developer/asu-codex-bridge/setup_claude_macos.py install
+```
+
+安裝器會：沿用 Keychain 既有的 CreateAI token（沒有才要求輸入一次）、對 `aws/claude5_opus` 與 `aws/claude4_5_haiku` 各跑一次工具往返實測、安裝登入時自動啟動的 LaunchAgent（`com.rich.asu-claude-bridge`，固定 `127.0.0.1:41118`），最後才在 `~/.claude/settings.json` 的 `env` 寫入 `ANTHROPIC_BASE_URL`。健康檢查沒過就不會動 `settings.json`。原檔備份為 `~/.claude/settings.json.asu-backup-*`。
+
+安裝後開新的 Claude Code session 才會生效。檢查狀態與目前用哪一邊：
+
+```sh
+python3 ~/Developer/asu-codex-bridge/setup_claude_macos.py status
+```
+
+移除並還原 `settings.json`：
+
+```sh
+python3 ~/Developer/asu-codex-bridge/setup_claude_macos.py uninstall
+```
+
+不安裝、只臨時跑一次：
+
+```sh
+python3 ~/Developer/asu-codex-bridge/claude_asu.py --doctor          # 只測 CreateAI
+python3 ~/Developer/asu-codex-bridge/claude_asu.py -- -p "hello"     # 用臨時 port 跑 Claude Code
+```
+
+### 切換條件
+
+- Anthropic 回 402／429 且 `anthropic-ratelimit-unified-status: rejected`，或錯誤訊息含 usage limit／quota／credit balance 一類字樣，才算額度耗盡。
+- 短期 rate limit、`overloaded_error`、401／403 一律原樣回傳給 Claude Code，不切換。
+- 切換有時效：優先採用 `anthropic-ratelimit-unified-reset` 或 `retry-after`，否則 30 分鐘，上限 6 小時。時間到會自動再試 Anthropic，額度恢復就自己切回來。
+- 想立刻驗證 fallback：`touch ~/.claude/asu-fallback-force`（刪掉即恢復）。想放寬成「任何 429 都切」：LaunchAgent 環境加 `ASU_CLAUDE_FALLBACK_ON_ANY_429=1`。
+- `~/Library/Logs/ASUClaudeBridge.log` 會記下每次切換的 HTTP 狀態與錯誤訊息，可用來校正上面的判斷字串。
+
+### 相容性限制
+
+- CreateAI 走的是 Chat Completions，因此 fallback 期間沒有 extended thinking、prompt caching、web search 與其他 Anthropic 伺服器端工具；這些欄位會被丟棄，一般工具呼叫與既有工具結果保留。
+- 先前由 Anthropic 產生的 thinking block 不會送到 CreateAI（簽章無法轉移），可見訊息與工具結果仍在。
+- 超過 64 字元或含特殊字元的 MCP 工具名會轉成雜湊代號送出，回來再還原。
+- CreateAI 不接受 `tool_choice: none`，也不接受對話裡出現工具紀錄卻沒帶工具定義；兩者都由 bridge 補正。
+- 背景小模型請求（Haiku）預設對應 `aws/claude4_5_haiku`，其餘一律 `aws/claude5_opus`；用 `--model` / `--haiku-model` 可改。
+- Bridge 若沒在跑，所有 Claude Code session 都會連不上。緊急脫離：`ANTHROPIC_BASE_URL= claude`，或執行 `uninstall`。
+
+### 測試
+
+```sh
+python3 -m unittest test_claude_bridge -v
+```
+
+離線測試涵蓋訊息／工具翻譯、串流事件、額度判斷、時效切換，以及一次完整的本機 HTTP 失敗切換。不會呼叫真實 API。
