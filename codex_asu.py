@@ -19,6 +19,10 @@ ENVIRONMENTS = {
     "beta": "https://api-main-beta.aiml.asu.edu/v1",
     "poc": "https://api-main-poc.aiml.asu.edu/v1",
 }
+PROVIDERS = {
+    "createai": ENVIRONMENTS["production"],
+    "rc": "https://openai.rc.asu.edu/v1",
+}
 
 
 def codex_overrides(base_url, model):
@@ -49,12 +53,14 @@ def codex_overrides(base_url, model):
     return [part for key, value in values.items() for part in ("-c", key + "=" + value)]
 
 
-def get_token():
-    token = os.environ.get("ASU_CREATEAI_TOKEN")
+def get_token(provider="createai"):
+    variable = "ASU_RC_TOKEN" if provider == "rc" else "ASU_CREATEAI_TOKEN"
+    label = "RC API" if provider == "rc" else "ASU CreateAI Service"
+    token = os.environ.get(variable)
     if not token:
         if not sys.stdin.isatty():
-            raise BridgeError("Set ASU_CREATEAI_TOKEN or run in a terminal to enter it privately.")
-        token = getpass.getpass("ASU Service token (hidden, kept in memory only): ").strip()
+            raise BridgeError(f"Set {variable} or run in a terminal to enter it privately.")
+        token = getpass.getpass(f"{label} token (hidden, kept in memory only): ").strip()
     if not token or "\n" in token or "\r" in token:
         raise BridgeError("A valid ASU Service token is required.")
     return token
@@ -176,7 +182,10 @@ def diagnose(upstream, model):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, epilog="Pass Codex arguments after --. No token is stored.")
-    parser.add_argument("--environment", choices=ENVIRONMENTS, default="production")
+    parser.add_argument("--provider", choices=PROVIDERS, default="createai",
+                        help="upstream provider; rc uses ASU Research Computing's OpenAI-compatible API")
+    parser.add_argument("--environment", choices=ENVIRONMENTS, default="production",
+                        help="CreateAI environment (ignored for --provider rc)")
     parser.add_argument("--model", default=os.environ.get("ASU_MODEL", "auto"),
                         help="auto maps the requested model to its CreateAI counterpart; or an exact "
                              "ASU model ID, or defaults for the Builder project's model")
@@ -191,7 +200,8 @@ def main():
     if remaining[:1] == ["--"]:
         remaining = remaining[1:]
     try:
-        upstream = Upstream(ENVIRONMENTS[args.environment], get_token())
+        endpoint = PROVIDERS[args.provider] if args.provider == "rc" else ENVIRONMENTS[args.environment]
+        upstream = Upstream(endpoint, get_token(args.provider))
         if args.model == "auto" and (args.doctor or args.diagnose):
             from asu.model_map import resolve
             args.model = resolve(args.primary_model, [item["id"] for item in upstream.models().get("data", [])],
@@ -209,13 +219,13 @@ def main():
         if args.auto:
             server = FallbackServer(upstream, local_token, Primary(args.primary), args.model).start()
             overrides = auto_overrides(server.base_url, args.primary_model)
-            print(f"Auto mode: {args.primary}/{args.primary_model} -> ASU/{args.model} on exhausted quota.", file=sys.stderr)
+            print(f"Auto mode: {args.primary}/{args.primary_model} -> {args.provider}/{args.model} on exhausted quota.", file=sys.stderr)
         else:
             if args.model == "auto":
                 raise BridgeError("ASU-only mode needs an explicit --model (auto maps from the primary model).")
             server = BridgeServer(upstream, local_token).start()
             overrides = codex_overrides(server.base_url, args.model)
-            print(f"ASU mode: {args.environment}, model={args.model}. Quit Codex to stop the bridge.", file=sys.stderr)
+            print(f"ASU mode: {args.provider}, model={args.model}. Quit Codex to stop the bridge.", file=sys.stderr)
         try:
             return subprocess.call([binary, *overrides, *remaining],
                                    env=child_environment(local_token))

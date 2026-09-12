@@ -11,7 +11,7 @@ import sys
 from asu.anthropic_bridge import message_events
 from asu.createai import BridgeError, Upstream
 from claude_daemon import DEFAULT_PORT, add_arguments, build_server, keychain_token
-from codex_asu import ENVIRONMENTS
+from codex_asu import ENVIRONMENTS, PROVIDERS
 
 MARKER = "ASU_OK"
 TOOL = {"name": "connection_check", "description": "Echo a test marker.",
@@ -57,7 +57,9 @@ def doctor(upstream, model):
 def main():
     parser = add_arguments(argparse.ArgumentParser(description=__doc__,
                                                   epilog="Claude Code arguments go after --."))
-    parser.add_argument("--doctor", action="store_true", help="Run two small live CreateAI requests")
+    parser.add_argument("--provider", choices=PROVIDERS, default="createai",
+                        help="upstream provider; rc uses ASU Research Computing's OpenAI-compatible API")
+    parser.add_argument("--doctor", action="store_true", help="Run two small live provider requests")
     parser.add_argument("--force-fallback", action="store_true",
                         help="Send every request to CreateAI for this run only; the installed "
                              "service and other sessions are untouched")
@@ -67,9 +69,19 @@ def main():
         args.port = 0
     remaining = args.claude_args[1:] if args.claude_args[:1] == ["--"] else args.claude_args
     try:
-        token = keychain_token() if not os.environ.get("ASU_CREATEAI_TOKEN") else os.environ["ASU_CREATEAI_TOKEN"]
+        if args.provider == "rc":
+            token = os.environ.get("ASU_RC_TOKEN")
+            if not token:
+                if not sys.stdin.isatty():
+                    raise BridgeError("Set ASU_RC_TOKEN or run in a terminal to enter it privately.")
+                token = getpass.getpass("RC API token (hidden, kept in memory only): ").strip()
+            if not token or "\n" in token or "\r" in token:
+                raise BridgeError("A valid RC API token is required.")
+        else:
+            token = keychain_token() if not os.environ.get("ASU_CREATEAI_TOKEN") else os.environ["ASU_CREATEAI_TOKEN"]
+        endpoint = PROVIDERS[args.provider] if args.provider == "rc" else ENVIRONMENTS[args.environment]
         if args.doctor:
-            doctor(Upstream(ENVIRONMENTS[args.environment], token), args.model)
+            doctor(Upstream(endpoint, token), args.model)
             return 0
         binary = shutil.which("claude")
         if not binary:
@@ -77,7 +89,7 @@ def main():
         server = build_server(args, token)
         server.fallback.forced = args.force_fallback
         server.start()
-        state = "CreateAI only (forced)" if args.force_fallback else "Anthropic, CreateAI on a usage limit"
+        state = f"{args.provider} only (forced)" if args.force_fallback else f"Anthropic, {args.provider} on a usage limit"
         print(f"Claude Code via {server.base_url}; {state}; model {args.model}. Quit Claude to stop.",
               file=sys.stderr)
         environment = dict(os.environ, ANTHROPIC_BASE_URL=server.base_url)
