@@ -84,10 +84,15 @@ own reset window expires.
 ## Verification expectations
 
 Client-visible behavior is verified against the real clients, not only unit tests: drive
-`claude -p` / `codex exec` through a bridge, force fallback with
-`touch ~/.claude/asu-fallback-force`, and confirm a tool actually executes. Claims about what
-CreateAI accepts come from repeated live probes (3 runs per case), because its 5xx responses are
-intermittent and a single failure proves nothing.
+`claude -p` / `codex exec` through a bridge and confirm a tool actually executes. Claims about
+what CreateAI accepts come from repeated live probes (3 runs per case), because its 5xx
+responses are intermittent and a single failure proves nothing.
+
+Forcing fallback exists only on the Claude side, in two forms that are not interchangeable:
+`touch ~/.claude/asu-fallback-force` is machine-wide and diverts every running Claude bridge,
+while `claude_asu.py --force-fallback` forces that one instance and never writes the flag file.
+`router.py` has no force path at all — it switches only on a real `PrimaryQuota`, so exercising
+Codex fallback means hitting an actual usage limit or stubbing the primary.
 
 After changing code that a LaunchAgent runs, restart it — a running service keeps the old code:
 
