@@ -7,7 +7,8 @@ import sys
 import threading
 import time
 
-from anthropic_bridge import DEFAULT_HAIKU_MODEL, DEFAULT_MODEL
+from anthropic_bridge import DEFAULT_MODEL
+from model_map import AUTO
 from bridge import BridgeError, Upstream
 from claude_router import ANTHROPIC_URL, Primary, RouterServer
 from codex_asu import ENVIRONMENTS
@@ -31,17 +32,16 @@ def keychain_token():
 
 def add_arguments(parser):
     parser.add_argument("--environment", choices=ENVIRONMENTS, default="production")
-    parser.add_argument("--model", default=DEFAULT_MODEL, help="CreateAI model used when Claude is exhausted")
-    parser.add_argument("--haiku-model", default=DEFAULT_HAIKU_MODEL,
-                        help="CreateAI model for Claude Code's small background model; empty to disable")
+    parser.add_argument("--model", default=AUTO,
+                        help=f"auto maps each requested Claude model to its CreateAI counterpart "
+                             f"(unmapped models use {DEFAULT_MODEL}); or pass one exact CreateAI id")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     return parser
 
 
 def build_server(args, token=None):
     upstream = Upstream(ENVIRONMENTS[args.environment], token, timeout=900) if token else None
-    return RouterServer(upstream, Primary(ANTHROPIC_URL),
-                        model=args.model, haiku_model=args.haiku_model, port=args.port)
+    return RouterServer(upstream, Primary(ANTHROPIC_URL), model=args.model, port=args.port)
 
 
 def load_token_later(server, args, delay=30):

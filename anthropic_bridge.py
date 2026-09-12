@@ -14,15 +14,8 @@ import secrets
 from bridge import BridgeError, dumps, sse_data
 
 NAME_OK = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
-# Claude Code's small/background model stays small on the fallback provider.
+# Used when a requested model has no CreateAI counterpart.
 DEFAULT_MODEL = "aws/claude5_opus"
-DEFAULT_HAIKU_MODEL = "aws/claude4_5_haiku"
-
-
-def select_model(requested, model=DEFAULT_MODEL, haiku_model=DEFAULT_HAIKU_MODEL):
-    if haiku_model and "haiku" in (requested or "").lower():
-        return haiku_model
-    return model
 
 
 def wire_name(name):

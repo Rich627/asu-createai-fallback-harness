@@ -7,7 +7,8 @@ import urllib.request
 
 import anthropic_bridge
 import claude_router
-from anthropic_bridge import ToolMap, message_events, select_model, translate
+from anthropic_bridge import ToolMap, message_events, translate
+from model_map import KNOWN_MODELS, Resolver, resolve
 from bridge import BridgeError, dumps
 from claude_router import Fallback, PrimaryQuota, RouterServer, is_quota, quota_window
 
@@ -113,10 +114,23 @@ class TranslateTest(unittest.TestCase):
         toolmap = ToolMap([{"type": "web_search_20250305", "name": "web_search"}, TOOL])
         self.assertEqual([tool["function"]["name"] for tool in toolmap.tools], ["Bash"])
 
-    def test_model_selection(self):
-        self.assertEqual(select_model("claude-opus-5"), anthropic_bridge.DEFAULT_MODEL)
-        self.assertEqual(select_model("claude-haiku-4-5-20251001"), anthropic_bridge.DEFAULT_HAIKU_MODEL)
-        self.assertEqual(select_model("claude-haiku-4-5", "m", ""), "m")
+    def test_model_mapping_follows_the_users_choice(self):
+        default = anthropic_bridge.DEFAULT_MODEL
+        for requested, expected in (("claude-opus-5", "aws/claude5_opus"),
+                                    ("claude-sonnet-5", "aws/claude5_sonnet"),
+                                    ("claude-haiku-4-5-20251001", "aws/claude4_5_haiku"),
+                                    ("claude-opus-4-1-20250805", "aws/claude4_1_opus"),
+                                    ("gpt-5.6-sol", "openai/gpt5_6_sol"),
+                                    ("gpt-6-astra", "openai/gpt6_astra")):
+            self.assertEqual(resolve(requested, KNOWN_MODELS, default), expected, requested)
+        self.assertEqual(resolve("something-else", KNOWN_MODELS, default), default)
+        # A model CreateAI has not got yet falls back to the newest of the same family.
+        self.assertEqual(resolve("claude-opus-9", KNOWN_MODELS, default), "aws/claude5_opus")
+
+    def test_resolver_survives_a_missing_upstream(self):
+        resolver = Resolver(lambda: None, "aws/claude5_opus")
+        self.assertEqual(resolver.target("claude-sonnet-5"), "aws/claude5_sonnet")
+        self.assertEqual(resolver.target("claude-sonnet-5", "aws/claude4_8_opus"), "aws/claude4_8_opus")
 
 
 class EventTest(unittest.TestCase):

@@ -9,6 +9,7 @@ from bridge import BridgeError, Upstream
 from codex_asu import ENVIRONMENTS
 from router import FallbackServer, Primary
 from keychain import load_password
+from model_map import AUTO
 
 KEYCHAIN_SERVICE = "edu.asu.createai.codex-fallback"
 DEFAULT_PORT = 41117
@@ -24,7 +25,9 @@ def keychain_token():
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--environment", choices=ENVIRONMENTS, default="production")
-    parser.add_argument("--model", default="defaults")
+    parser.add_argument("--model", default=AUTO,
+                        help="auto maps each requested model to its CreateAI counterpart; "
+                             "or pass one exact CreateAI id")
     parser.add_argument("--primary", choices=("chatgpt", "api"), default="chatgpt")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     args = parser.parse_args()

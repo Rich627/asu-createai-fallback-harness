@@ -15,7 +15,8 @@ import time
 import urllib.error
 import urllib.request
 
-from anthropic_bridge import DEFAULT_HAIKU_MODEL, DEFAULT_MODEL
+from anthropic_bridge import DEFAULT_MODEL
+from model_map import AUTO, KNOWN_MODELS, resolve
 from bridge import BridgeError, Upstream
 from claude_asu import doctor
 from claude_daemon import DEFAULT_PORT, KEYCHAIN_SERVICE, SHARED_SERVICE
@@ -111,11 +112,15 @@ def install(args):
     else:
         store_token()
     token = load_token()
-    print(f"Testing CreateAI ({args.environment}/{args.model}) before changing Claude Code settings...")
-    doctor(Upstream(ENVIRONMENTS[args.environment], token), args.model)
-    if args.haiku_model:
-        print(f"Checking the background model {args.haiku_model}...")
-        doctor(Upstream(ENVIRONMENTS[args.environment], token), args.haiku_model)
+    upstream = Upstream(ENVIRONMENTS[args.environment], token)
+    checks = [args.model]
+    if args.model == AUTO:
+        available = [item["id"] for item in upstream.models().get("data", [])] or list(KNOWN_MODELS)
+        checks = [resolve(name, available, DEFAULT_MODEL) for name in ("claude-opus-5", "claude-haiku-4-5")]
+        print(f"Model mapping is automatic; verifying {', '.join(checks)}.")
+    for name in dict.fromkeys(checks):
+        print(f"Testing CreateAI ({args.environment}/{name}) before changing Claude Code settings...")
+        doctor(upstream, name)
 
     settings = read_settings()
     environment = dict(settings.get("env") or {})
@@ -128,7 +133,7 @@ def install(args):
         "Label": LABEL,
         "ProgramArguments": [interpreter(), str(ROOT / "claude_daemon.py"),
                              "--environment", args.environment, "--model", args.model,
-                             "--haiku-model", args.haiku_model, "--port", str(args.port)],
+                             "--port", str(args.port)],
         "RunAtLoad": True,
         "KeepAlive": True,
         "StandardOutPath": str(LOG),
@@ -217,9 +222,9 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
     install_parser = sub.add_parser("install")
     install_parser.add_argument("--environment", choices=ENVIRONMENTS, default="production")
-    install_parser.add_argument("--model", default=DEFAULT_MODEL)
-    install_parser.add_argument("--haiku-model", default=DEFAULT_HAIKU_MODEL,
-                                help='CreateAI model for background Haiku requests; "" to send them to --model')
+    install_parser.add_argument("--model", default=AUTO,
+                                help="auto maps each Claude model to its CreateAI counterpart, "
+                                     "or pass one exact CreateAI id to pin every fallback request")
     install_parser.add_argument("--use-keychain", action="store_true")
     install_parser.add_argument("--port", type=port_number, default=DEFAULT_PORT)
     install_parser.set_defaults(function=install)

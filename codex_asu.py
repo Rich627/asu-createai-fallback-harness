@@ -175,8 +175,9 @@ def diagnose(upstream, model):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, epilog="Pass Codex arguments after --. No token is stored.")
     parser.add_argument("--environment", choices=ENVIRONMENTS, default="production")
-    parser.add_argument("--model", default=os.environ.get("ASU_MODEL", "defaults"),
-                        help="Exact ASU model ID, or defaults for the Builder project's model")
+    parser.add_argument("--model", default=os.environ.get("ASU_MODEL", "auto"),
+                        help="auto maps the requested model to its CreateAI counterpart; or an exact "
+                             "ASU model ID, or defaults for the Builder project's model")
     parser.add_argument("--doctor", action="store_true", help="List models and run two small live model requests")
     parser.add_argument("--diagnose", action="store_true", help="Probe models, basic chat, streaming, and Responses independently (three small model requests)")
     parser.add_argument("--auto", action="store_true", help="Use the primary provider until a recognized quota error, then ASU")
@@ -189,6 +190,11 @@ def main():
         remaining = remaining[1:]
     try:
         upstream = Upstream(ENVIRONMENTS[args.environment], get_token())
+        if args.model == "auto" and (args.doctor or args.diagnose):
+            from model_map import resolve
+            args.model = resolve(args.primary_model, [item["id"] for item in upstream.models().get("data", [])],
+                                 "defaults")
+            print(f"auto model check resolved to {args.model}", file=sys.stderr)
         if args.diagnose:
             return 0 if diagnose(upstream, args.model) else 1
         if args.doctor:
@@ -203,6 +209,8 @@ def main():
             overrides = auto_overrides(server.base_url, args.primary_model)
             print(f"Auto mode: {args.primary}/{args.primary_model} -> ASU/{args.model} on exhausted quota.", file=sys.stderr)
         else:
+            if args.model == "auto":
+                raise BridgeError("ASU-only mode needs an explicit --model (auto maps from the primary model).")
             server = BridgeServer(upstream, local_token).start()
             overrides = codex_overrides(server.base_url, args.model)
             print(f"ASU mode: {args.environment}, model={args.model}. Quit Codex to stop the bridge.", file=sys.stderr)

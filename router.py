@@ -7,6 +7,7 @@ import urllib.error
 import urllib.request
 
 from bridge import BridgeError, BridgeServer, NoRedirect, dumps, response_events, sse_data
+from model_map import AUTO, Resolver
 
 PRIMARY_URLS = {
     "chatgpt": "https://chatgpt.com/backend-api/codex/responses",
@@ -82,9 +83,10 @@ class Primary:
 class FallbackServer(BridgeServer):
     uses_primary_auth = True
 
-    def __init__(self, upstream, token, primary, asu_model, port=0):
+    def __init__(self, upstream, token, primary, asu_model=AUTO, port=0):
         self.primary = primary
         self.asu_model = asu_model
+        self.resolver = Resolver(lambda: self.upstream, "defaults")
         self.fallback_active = threading.Event()
         super().__init__(upstream, token, port)
 
@@ -109,6 +111,6 @@ class FallbackServer(BridgeServer):
                     raise BridgeError("Primary quota exhausted after partial output. ASU is selected for the next request; current output was not replayed.", 429)
                 print("Primary quota exhausted. Continuing this request with ASU CreateAI.", file=sys.stderr)
         # Full input history and tool results are passed on; no new task/session is created.
-        asu_request = {**request, "model": self.asu_model}
+        asu_request = {**request, "model": self.resolver.target(request.get("model"), self.asu_model)}
         asu_request.pop("reasoning", None)
         yield from response_events(self.upstream, asu_request)

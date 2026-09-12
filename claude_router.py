@@ -16,8 +16,9 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from anthropic_bridge import DEFAULT_HAIKU_MODEL, DEFAULT_MODEL, message_events, select_model
+from anthropic_bridge import DEFAULT_MODEL, message_events
 from bridge import BridgeError, NoRedirect, dumps
+from model_map import AUTO, Resolver
 
 ANTHROPIC_URL = "https://api.anthropic.com"
 FORCE_FLAG = Path.home() / ".claude" / "asu-fallback-force"
@@ -168,12 +169,11 @@ class RouterServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
-    def __init__(self, upstream=None, primary=None, model=DEFAULT_MODEL, haiku_model=DEFAULT_HAIKU_MODEL,
-                 port=0, address="127.0.0.1"):
+    def __init__(self, upstream=None, primary=None, model=AUTO, port=0, address="127.0.0.1"):
         self.upstream = upstream
         self.primary = primary
         self.model = model
-        self.haiku_model = haiku_model
+        self.resolver = Resolver(lambda: self.upstream, DEFAULT_MODEL)
         self.fallback = Fallback()
         super().__init__((address, port), Handler)
 
@@ -293,7 +293,7 @@ class Handler(BaseHTTPRequestHandler):
             request = json.loads(body)
             if not isinstance(request, dict):
                 raise BridgeError("Invalid Messages request.")
-            model = select_model(request.get("model"), self.server.model, self.server.haiku_model)
+            model = self.server.resolver.target(request.get("model"), self.server.model)
             result = []
             events = message_events(self.server.upstream, request, model, result)
             first = next(events)  # Open CreateAI before committing to HTTP 200.

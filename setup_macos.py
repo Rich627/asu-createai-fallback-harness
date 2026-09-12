@@ -19,6 +19,7 @@ from bridge import BridgeError, Upstream
 from codex_asu import ENVIRONMENTS, diagnose, doctor
 from daemon import DEFAULT_PORT, KEYCHAIN_SERVICE
 from keychain import delete_password, load_password, password_exists, save_password
+from model_map import AUTO, KNOWN_MODELS, resolve
 
 LABEL = "com.rich.asu-codex-bridge"
 BEGIN = "# BEGIN ASU CODEX BRIDGE (managed by setup_macos.py)"
@@ -93,6 +94,15 @@ stream_max_retries = 0
 '''
 
 
+def codex_model():
+    """The model Codex is configured to use, so an auto install can verify its counterpart."""
+    if CONFIG.exists():
+        line = top_level_value(CONFIG.read_text(), "model")
+        if line and "=" in line:
+            return line.split("=", 1)[1].strip().strip('"')
+    return "gpt-5.6-sol"
+
+
 def store_token():
     print("Paste the ASU CreateAI Service token once; input is hidden.")
     token = getpass.getpass("ASU Service token: ").strip()
@@ -144,11 +154,17 @@ def install(args):
     else:
         store_token()
     token = load_token()
+    upstream = Upstream(ENVIRONMENTS[args.environment], token)
+    checked = args.model
+    if checked == AUTO:
+        available = [item["id"] for item in upstream.models().get("data", [])] or list(KNOWN_MODELS)
+        checked = resolve(codex_model(), available, "defaults")
+        print(f"Model mapping is automatic; verifying {checked} for the configured Codex model.")
     print("Testing CreateAI before changing Codex configuration...")
-    if not diagnose(Upstream(ENVIRONMENTS[args.environment], token), args.model):
+    if not diagnose(upstream, checked):
         raise BridgeError("CreateAI diagnostics failed. Codex configuration was not changed.")
     print("Testing CreateAI tool calls and tool-result continuation...")
-    doctor(Upstream(ENVIRONMENTS[args.environment], token), args.model)
+    doctor(upstream, checked)
 
     original = CONFIG.read_text() if CONFIG.exists() else ""
     if BEGIN in original or "[model_providers.asu_autofallback]" in original:
@@ -249,7 +265,9 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
     install_parser = sub.add_parser("install")
     install_parser.add_argument("--environment", choices=ENVIRONMENTS, default="production")
-    install_parser.add_argument("--model", default="defaults")
+    install_parser.add_argument("--model", default=AUTO,
+                                help="auto maps each Codex model to its CreateAI counterpart, "
+                                     "or pass one exact CreateAI id")
     install_parser.add_argument("--use-keychain", action="store_true",
                                 help="Use the CreateAI token already stored in macOS Keychain")
     install_parser.add_argument("--primary", choices=("chatgpt", "api"), default="chatgpt")
