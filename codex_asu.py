@@ -89,7 +89,8 @@ def doctor(upstream, model):
     tool = {"type": "function", "name": "connection_check", "description": "Echo a test marker.",
             "parameters": {"type": "object", "properties": {"marker": {"type": "string"}},
                            "required": ["marker"], "additionalProperties": False}}
-    # Forced tool_choice is rejected by CreateAI's OpenAI-hosted models, so ask in the prompt.
+    # Ask for the call in the prompt instead of forcing it, so the check also covers the
+    # path every real client request takes.
     request = {"model": model, "input": "Call connection_check with marker ASU_OK. Do not answer in text.",
                "tools": [tool], "tool_choice": "auto"}
     print("[2/3] Streaming tool call via /chat/completions", flush=True)

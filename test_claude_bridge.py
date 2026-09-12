@@ -103,6 +103,23 @@ class TranslateTest(unittest.TestCase):
             {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "ok"}]}]})
         self.assertEqual(body["tool_choice"], "auto")
 
+    def test_tool_choice_matches_what_each_model_family_accepts(self):
+        request = {"tools": [TOOL], "tool_choice": {"type": "tool", "name": "Bash"},
+                   "messages": [{"role": "user", "content": "hi"}]}
+        self.assertEqual(translate(request, "aws/claude5_opus")[0]["tool_choice"],
+                         {"type": "function", "function": {"name": "Bash"}})
+        # CreateAI's OpenAI-hosted models answer a forced single tool with HTTP 500.
+        self.assertEqual(translate(request, "openai/gpt5_6_sol")[0]["tool_choice"], "auto")
+        request["tool_choice"] = {"type": "none"}
+        request["messages"] = [{"role": "user", "content": "x"},
+                               {"role": "assistant", "content": [
+                                   {"type": "tool_use", "id": "t1", "name": "Bash", "input": {}}]},
+                               {"role": "user", "content": [
+                                   {"type": "tool_result", "tool_use_id": "t1", "content": "ok"}]}]
+        self.assertEqual(translate(request, "openai/gpt5_6_sol")[0]["tool_choice"], "none")
+        # Bedrock-hosted models answer "none" with HTTP 500.
+        self.assertEqual(translate(request, "aws/claude5_opus")[0]["tool_choice"], "auto")
+
     def test_long_mcp_tool_name_round_trips(self):
         name = "mcp__" + "s" * 70 + "__tool"
         toolmap = ToolMap([{"name": name, "input_schema": {"type": "object"}}])
@@ -177,6 +194,41 @@ class EventTest(unittest.TestCase):
         upstream.open = lambda path, body=None: io.BytesIO(b"data: {}\n\n")
         with self.assertRaises(BridgeError):
             list(message_events(upstream, {"messages": [{"role": "user", "content": "hi"}]}, "m"))
+
+
+class RetryTest(unittest.TestCase):
+    def upstream(self, statuses):
+        from bridge import Upstream
+        upstream = Upstream("https://example.invalid/v1", "token")
+        self.calls = []
+
+        def request(path, body=None):
+            status = statuses[len(self.calls)]
+            self.calls.append(path)
+            if status != 200:
+                raise BridgeError(f"ASU HTTP {status}", status)
+            return sse([text_chunk("ok", "stop")])
+
+        upstream.request = request
+        return upstream
+
+    def test_transient_server_error_is_retried(self):
+        upstream = self.upstream([500, 200])
+        with upstream.open("/chat/completions", {}, backoff=0):
+            pass
+        self.assertEqual(len(self.calls), 2)
+
+    def test_retries_are_bounded_and_the_error_survives(self):
+        upstream = self.upstream([503, 502, 500])
+        with self.assertRaises(BridgeError):
+            upstream.open("/chat/completions", {}, backoff=0)
+        self.assertEqual(len(self.calls), 3)
+
+    def test_client_errors_are_not_retried(self):
+        upstream = self.upstream([400])
+        with self.assertRaises(BridgeError):
+            upstream.open("/chat/completions", {}, backoff=0)
+        self.assertEqual(len(self.calls), 1)
 
 
 class QuotaTest(unittest.TestCase):

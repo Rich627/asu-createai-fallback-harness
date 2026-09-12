@@ -1,7 +1,11 @@
 import tempfile
-import tomllib
 import unittest
 from pathlib import Path
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 and older
+    tomllib = None
 
 import setup_macos
 from setup_macos import config_block, port_number, remove_block, remove_top_level_key, top_level_value
@@ -11,6 +15,7 @@ class ConfigEditingTests(unittest.TestCase):
     def test_install_help_has_keychain_reuse(self):
         source = Path(setup_macos.__file__).read_text()
         self.assertIn('"--use-keychain"', source)
+    @unittest.skipUnless(tomllib, "TOML validation needs Python 3.11+")
     def test_managed_provider_is_valid_toml_with_existing_tables(self):
         original = '''model = "gpt-5.6-sol"
 model_provider = "old"
@@ -31,6 +36,7 @@ apps = true
         restored = prior + "\n" + restored.lstrip()
         self.assertEqual(tomllib.loads(restored), tomllib.loads(original))
 
+    @unittest.skipUnless(tomllib, "TOML validation needs Python 3.11+")
     def test_no_prior_provider_restores_without_one(self):
         original = 'model = "gpt-5.6-sol"\n'
         updated = 'model_provider = "asu_autofallback"\n' + original + "\n" + config_block(41117)

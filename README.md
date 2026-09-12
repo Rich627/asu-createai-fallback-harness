@@ -136,8 +136,12 @@ CreateAI is an OpenAI-compatible Chat Completions API, so while it is serving:
 - thinking blocks produced earlier by Anthropic are not forwarded (their signatures are not
   transferable); visible messages and tool results are;
 - MCP tool names longer than 64 characters are hashed on the wire and restored on the way back;
-- `tool_choice: none` and forced single-tool choice are not accepted by CreateAI, and a
-  conversation that replays tool calls must re-declare those tools — the bridge fixes both;
+- CreateAI's two model families reject opposite things (measured 3/3 each way): Bedrock-hosted
+  `aws/claude*` answers `tool_choice: "none"` with HTTP 500, while OpenAI-hosted `openai/gpt*`
+  answers a forced single-tool choice with HTTP 500. A conversation that replays tool calls must
+  also re-declare those tools. The bridge handles all three;
+- CreateAI also returns intermittent 5xx, so every upstream call is retried up to three times
+  before the client's turn is allowed to fail;
 - token counting is estimated;
 - your CreateAI project's own quota and its 750k tokens/minute rate limit now apply, and each
   fallback request is billed to that project.

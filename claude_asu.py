@@ -32,7 +32,8 @@ def doctor(upstream, model):
     if model not in ids:
         raise BridgeError(f"{model} is not in this token's model list ({len(ids)} models available).")
     print(f"Authentication OK; {model} is available.")
-    # Forced tool_choice is rejected by CreateAI's OpenAI-hosted models, so ask in the prompt.
+    # Ask for the call in the prompt instead of forcing it, so the check also covers the
+    # path every real client request takes.
     request = {"model": model, "max_tokens": 1024, "tools": [TOOL], "tool_choice": {"type": "auto"},
                "messages": [{"role": "user", "content": f"Call connection_check with marker {MARKER}. "
                                                         f"Do not answer in text."}]}

@@ -26,6 +26,16 @@ KNOWN_MODELS = (
 )
 
 
+def accepts_forced_tool(model):
+    """Measured 3/3 each way: Bedrock-hosted Claude models accept a forced single tool and
+    reject tool_choice "none"; CreateAI's OpenAI-hosted models do the opposite."""
+    return not str(model or "").startswith("openai/")
+
+
+def accepts_tool_choice_none(model):
+    return str(model or "").startswith("openai/")
+
+
 def version_key(model):
     numbers = re.findall(r"\d+", model)
     return tuple(int(number) for number in numbers) or (0,)

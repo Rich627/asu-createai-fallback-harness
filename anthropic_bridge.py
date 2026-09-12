@@ -12,6 +12,7 @@ import re
 import secrets
 
 from bridge import BridgeError, dumps, sse_data
+from model_map import accepts_forced_tool, accepts_tool_choice_none
 
 NAME_OK = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 # Used when a requested model has no CreateAI counterpart.
@@ -163,13 +164,15 @@ def translate(request, model):
         tools = []
     if tools:
         body["tools"] = tools
-        if choice == "tool" and request["tool_choice"].get("name"):
+        if choice == "tool" and request["tool_choice"].get("name") and accepts_forced_tool(model):
             body["tool_choice"] = {"type": "function", "function": {
                 "name": toolmap.wire(request["tool_choice"]["name"])}}
         elif choice == "any":
             body["tool_choice"] = "required"
+        elif choice == "none" and accepts_tool_choice_none(model):
+            body["tool_choice"] = "none"
         else:
-            # CreateAI has no "none"; the prompt still asks the model not to call tools.
+            # Neither model family accepts every form; auto is the one both take.
             body["tool_choice"] = "auto"
     if request.get("max_tokens"):
         body["max_tokens"] = request["max_tokens"]

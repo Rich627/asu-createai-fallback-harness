@@ -16,6 +16,8 @@ import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from model_map import accepts_forced_tool, accepts_tool_choice_none
+
 
 class BridgeError(Exception):
     def __init__(self, message, status=400):
@@ -40,7 +42,21 @@ class Upstream:
         # Do not route credentials via environment-configured HTTP proxies.
         self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
 
-    def open(self, path, body=None):
+    def open(self, path, body=None, attempts=3, backoff=0.75):
+        """CreateAI returns intermittent 5xx; retry before the client's turn fails.
+
+        Safe to repeat: nothing has been streamed to the client yet, and tool calls are
+        only handed over once a stream completes.
+        """
+        for attempt in range(1, attempts + 1):
+            try:
+                return self.request(path, body)
+            except BridgeError as exc:
+                if exc.status not in (500, 502, 503, 504) or attempt == attempts:
+                    raise
+                time.sleep(backoff * attempt)
+
+    def request(self, path, body=None):
         headers = {"Authorization": "Bearer " + self.token, "Content-Type": "application/json"}
         req = urllib.request.Request(self.base_url + path, headers=headers,
                                      data=None if body is None else dumps(body).encode())
@@ -52,7 +68,8 @@ class Upstream:
             advice = {401: "Check the ASU service token and environment.",
                       403: "Check project/API access and model permission.",
                       404: "Check the ASU environment and model ID.",
-                      429: "ASU quota or rate limit reached; wait or contact ASU."}.get(
+                      429: "ASU quota or rate limit reached; wait or contact ASU.",
+                      500: "ASU returned a server error and retries did not help; try again."}.get(
                           status, "Check ASU model compatibility and service status.")
             raise BridgeError(f"ASU HTTP {status} at {path}. {advice}", status) from None
         except (OSError, urllib.error.URLError):
@@ -197,13 +214,19 @@ def translate(request):
     body = {"model": request["model"], "messages": messages, "stream": True,
             "stream_options": {"include_usage": True},
             "request_source": "override_params", "agentic": False}
-    if toolmap.tools:
-        body["tools"] = toolmap.tools
-        choice = request.get("tool_choice", "auto")
+    choice = request.get("tool_choice", "auto")
+    tools = list(toolmap.tools)
+    if tools and choice == "none" and not accepts_tool_choice_none(body["model"]):
+        # Bedrock-hosted models reject "none"; dropping the tools says the same thing.
+        tools = [] if not any(message.get("tool_calls") for message in messages) else tools
+        choice = "auto"
+    if tools:
+        body["tools"] = tools
         if isinstance(choice, dict):
             if choice.get("type") not in ("function", "custom"):
                 raise BridgeError("Unsupported tool_choice.")
-            choice = {"type": "function", "function": {"name": toolmap.wire_name(choice)}}
+            choice = ({"type": "function", "function": {"name": toolmap.wire_name(choice)}}
+                      if accepts_forced_tool(body["model"]) else "auto")
         body["tool_choice"] = choice
     for key in ("temperature", "top_p", "parallel_tool_calls"):
         if key in request:
