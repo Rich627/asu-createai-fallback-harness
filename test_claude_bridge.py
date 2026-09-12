@@ -2,6 +2,7 @@
 
 import io
 import json
+import threading
 import unittest
 import urllib.request
 
@@ -321,9 +322,14 @@ class ServerTest(unittest.TestCase):
                                  {"choices": [], "usage": {"prompt_tokens": 7, "completion_tokens": 2}}])
         primary = QuotaPrimary()
         logged = []
+        recorded = threading.Event()
         original = claude_router.log_usage
-        claude_router.log_usage = lambda model, stats: logged.append(
-            (model, stats.get("input_tokens"), stats.get("output_tokens")))
+
+        def capture(model, stats):
+            logged.append((model, stats.get("input_tokens"), stats.get("output_tokens")))
+            recorded.set()
+
+        claude_router.log_usage = capture
         self.addCleanup(setattr, claude_router, "log_usage", original)
         server = RouterServer(upstream, primary, port=0, forced=True).start()
         try:
@@ -335,6 +341,8 @@ class ServerTest(unittest.TestCase):
                 self.assertEqual(response.headers["X-ASU-Fallback"], "aws/claude5_opus")
             # Forced instances never touch the primary, and never write the machine-wide flag.
             self.assertEqual(primary.calls, 0)
+            # Usage is recorded after the response is delivered, so wait for that thread.
+            self.assertTrue(recorded.wait(10), "usage was never recorded")
             self.assertEqual(logged, [("aws/claude5_opus", 7, 2)])
             self.assertFalse(claude_router.FORCE_FLAG.exists())
             self.assertFalse(RouterServer(upstream, primary, port=0).fallback.active())
