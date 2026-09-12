@@ -11,7 +11,7 @@ import json
 import re
 import secrets
 
-from bridge import BridgeError, dumps, sse_data
+from createai import BridgeError, dumps, sse_data
 from model_map import accepts_forced_tool, accepts_tool_choice_none
 
 NAME_OK = re.compile(r"^[A-Za-z0-9_-]{1,64}$")

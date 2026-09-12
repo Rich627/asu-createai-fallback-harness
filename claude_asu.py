@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 from anthropic_bridge import message_events
-from bridge import BridgeError, Upstream
+from createai import BridgeError, Upstream
 from claude_daemon import DEFAULT_PORT, add_arguments, build_server, keychain_token
 from codex_asu import ENVIRONMENTS
 

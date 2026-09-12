@@ -5,9 +5,9 @@ import argparse
 import getpass
 import sys
 
-from bridge import BridgeError, Upstream
+from createai import BridgeError, Upstream
 from codex_asu import ENVIRONMENTS
-from router import FallbackServer, Primary
+from codex_router import FallbackServer, Primary
 from keychain import load_password
 from model_map import AUTO
 

@@ -9,7 +9,7 @@ import time
 
 from anthropic_bridge import DEFAULT_MODEL
 from model_map import AUTO
-from bridge import BridgeError, Upstream
+from createai import BridgeError, Upstream
 from claude_router import ANTHROPIC_URL, Primary, RouterServer
 from codex_asu import ENVIRONMENTS
 from keychain import load_password, password_exists

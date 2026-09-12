@@ -3,7 +3,7 @@ import io
 import json
 import unittest
 
-from bridge import BridgeError
+from createai import BridgeError
 from codex_asu import diagnose
 
 

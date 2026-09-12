@@ -15,14 +15,15 @@ import time
 import urllib.error
 import urllib.request
 
-from bridge import BridgeError, Upstream
+from createai import BridgeError, Upstream
 from codex_asu import ENVIRONMENTS, diagnose, doctor
-from daemon import DEFAULT_PORT, KEYCHAIN_SERVICE
+from codex_daemon import DEFAULT_PORT, KEYCHAIN_SERVICE
 from keychain import delete_password, load_password, password_exists, save_password
 from model_map import AUTO, KNOWN_MODELS, resolve
 
 LABEL = "com.rich.asu-codex-bridge"
-BEGIN = "# BEGIN ASU CODEX BRIDGE (managed by setup_macos.py)"
+BEGIN_PREFIX = "# BEGIN ASU CODEX BRIDGE"
+BEGIN = f"{BEGIN_PREFIX} (managed by setup_codex_macos.py)"
 END = "# END ASU CODEX BRIDGE"
 ROOT = Path(__file__).resolve().parent
 CONFIG = Path.home() / ".codex" / "config.toml"
@@ -45,7 +46,7 @@ def run(command, **kwargs):
 
 
 def remove_block(text):
-    start = text.find(BEGIN)
+    start = text.find(BEGIN_PREFIX)
     if start < 0:
         return text
     end = text.find(END, start)
@@ -176,7 +177,7 @@ def install(args):
     doctor(upstream, checked)
 
     original = CONFIG.read_text() if CONFIG.exists() else ""
-    if BEGIN in original or "[model_providers.asu_autofallback]" in original:
+    if BEGIN_PREFIX in original or "[model_providers.asu_autofallback]" in original:
         raise BridgeError("ASU Codex bridge is already installed. Run status or uninstall first.")
     prior_provider = top_level_value(original, "model_provider")
     original_without_provider = remove_top_level_key(original, "model_provider").lstrip()
@@ -192,7 +193,7 @@ def install(args):
 
     plist = {
         "Label": LABEL,
-        "ProgramArguments": [interpreter(), str(ROOT / "daemon.py"), "--environment", args.environment,
+        "ProgramArguments": [interpreter(), str(ROOT / "codex_daemon.py"), "--environment", args.environment,
                              "--model", args.model, "--primary", args.primary, "--port", str(args.port)],
         "RunAtLoad": True,
         "KeepAlive": True,
@@ -240,7 +241,7 @@ def uninstall(args):
 
 
 def status(_args):
-    configured = CONFIG.exists() and BEGIN in CONFIG.read_text()
+    configured = CONFIG.exists() and BEGIN_PREFIX in CONFIG.read_text()
     try:
         token = password_exists(KEYCHAIN_SERVICE, getpass.getuser())
     except BridgeError:

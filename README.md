@@ -8,8 +8,6 @@ the *same turn* on your own [ASU CreateAI](https://ai.asu.edu/ai-tools/createai-
 instead of stopping. Your subscription's limit still applies; CreateAI's quota and rate limits
 then apply in its place.
 
-繁體中文說明：[README.zh-TW.md](README.zh-TW.md)
-
 ```
 Claude Code ──► 127.0.0.1:41118 ──► api.anthropic.com                (normal)
                        └──────────► CreateAI /chat/completions       (usage limit reached)
@@ -46,22 +44,39 @@ Codex       ──► 127.0.0.1:41117 ──► chatgpt.com/backend-api/codex   
 - Claude Code and/or Codex CLI, already logged in
 - An ASU CreateAI Builder project and a **Service** API token
 
-### Getting the CreateAI token
+## Quick start
 
-1. In your CreateAI Builder project open **Profile → API Keys → Request API Key**.
-2. Set **Key Type** to `Service` and give it a name.
-3. Describe the use honestly, for example: *a local API-compatibility bridge that lets my
-   coding assistant continue an interrupted task on my CreateAI project when my primary
-   provider reaches its usage limit; the service token stays on my machine.*
-4. Keep the token out of shell history and source control — the installers read it from a
-   hidden prompt and store it in the Keychain.
+### 1. A CreateAI Service token
 
-## Install
+Request one from your CreateAI Builder project under **Profile → API Keys**. It has to be a
+**Service** key. Nothing here inspects the key type, but every command verifies the token
+against CreateAI first, so a token that cannot drive the API fails at install time instead of
+halfway through a session.
+
+Keep it out of shell history and out of source control. Every command below reads it from a
+hidden prompt and stores it in the macOS Keychain — you never paste it into a config file.
+
+### 2. Try it before changing anything
+
+This step installs nothing: no LaunchAgent, no edit to `settings.json` or `config.toml`. The
+bridge exists only for as long as the command runs.
+
+```sh
+python3 claude_asu.py --doctor                        # is CreateAI reachable, is the token good?
+python3 claude_asu.py --force-fallback -- -p "hello"  # this run answers from CreateAI
+python3 codex_asu.py --doctor
+python3 codex_asu.py --auto -- exec "hi"              # Codex through a temporary bridge
+```
+
+`--force-fallback` is how you see the fallback without waiting to hit a real quota wall. It
+belongs to that one temporary bridge, so any installed service and other sessions are unaffected.
+
+### 3. Install it
 
 Both installers test CreateAI **before** touching any client configuration, and refuse to
 change anything if those tests fail.
 
-### Claude Code
+#### Claude Code
 
 ```sh
 python3 setup_claude_macos.py install
@@ -73,30 +88,34 @@ This installs the LaunchAgent `com.rich.asu-claude-bridge` on `127.0.0.1:41118` 
 `env.ANTHROPIC_BASE_URL` in `~/.claude/settings.json` (backed up as `settings.json.asu-backup-*`).
 Start a new Claude Code session afterwards.
 
-### Codex
+#### Codex
 
 ```sh
-python3 setup_macos.py install
-python3 setup_macos.py status
-python3 setup_macos.py uninstall
+python3 setup_codex_macos.py install
+python3 setup_codex_macos.py status
+python3 setup_codex_macos.py uninstall
 ```
 
 This installs the LaunchAgent `com.rich.asu-codex-bridge` on `127.0.0.1:41117` and adds a
 `model_provider` to `~/.codex/config.toml` (backed up as `config.toml.asu-backup-*`).
 Fully quit and reopen Codex afterwards.
 
-### Without installing anything
+## Turning fallback on and off
 
-```sh
-python3 claude_asu.py --doctor                        # live CreateAI check for the Claude path
-python3 claude_asu.py -- -p "hello"                   # Claude Code through a temporary bridge
-python3 claude_asu.py --force-fallback -- -p "hello"  # that run only, straight to CreateAI
-python3 codex_asu.py --doctor                         # live CreateAI check for the Codex path
-python3 codex_asu.py --auto -- exec "hi"              # Codex through a temporary bridge
-```
+**There is nothing to enable.** Once installed, the bridge relays to your normal provider and
+moves to CreateAI by itself the moment it recognizes a usage-limit error. You never pick a
+provider by hand and nothing needs restarting.
 
-`--force-fallback` belongs to that one temporary bridge, so it is the safe way to try CreateAI
-while other sessions keep using the installed service on its normal path.
+The switches that exist do the opposite — they *force* CreateAI while you still have quota,
+which is only useful for trying it out:
+
+| Scope | How | Undo |
+|---|---|---|
+| One run | `python3 claude_asu.py --force-fallback -- -p "hi"` | ends with the command |
+| Every Claude session on this machine | `touch ~/.claude/asu-fallback-force` | delete the file |
+| Codex | no force path — it switches only on a real usage limit | — |
+
+To stop using the bridge at all, see [Escape hatch](#escape-hatch).
 
 ## Model mapping
 
@@ -131,9 +150,6 @@ so a missed pattern is diagnosable from the client's own output.
 
 The window comes from `anthropic-ratelimit-unified-reset` or `retry-after` when present,
 otherwise 30 minutes, capped at 6 hours.
-
-`touch ~/.claude/asu-fallback-force` forces the installed service onto CreateAI — note that this
-is machine-wide and affects every session using it; `--force-fallback` above affects one run.
 
 A 402/429 that is *not* recognized as a usage limit is relayed to the client and recorded in the
 log, so an unknown usage-limit shape can be identified and added rather than silently missed.
@@ -195,14 +211,15 @@ CI runs the offline suite on macOS and Linux across Python 3.9, 3.12 and 3.14.
 
 | File | Purpose |
 |---|---|
-| `bridge.py` | Responses → CreateAI translation and the local server (Codex) |
-| `router.py` | Codex primary relay with usage-limit failover |
+| `createai.py` | The CreateAI client and the wire primitives both bridges share |
+| `codex_bridge.py` | Responses → CreateAI translation and the local server (Codex) |
+| `codex_router.py` | Codex primary relay with usage-limit failover |
 | `anthropic_bridge.py` | Messages → CreateAI translation (Claude Code) |
 | `claude_router.py` | Claude primary relay with usage-limit failover |
 | `model_map.py` | Requested model → CreateAI model resolution |
 | `keychain.py` | Native macOS Keychain access, no secret in `argv` |
-| `daemon.py`, `claude_daemon.py` | The two background services |
-| `setup_macos.py`, `setup_claude_macos.py` | Install, status, uninstall |
+| `codex_daemon.py`, `claude_daemon.py` | The two background services |
+| `setup_codex_macos.py`, `setup_claude_macos.py` | Install, status, uninstall |
 | `codex_asu.py`, `claude_asu.py` | One-off runs and live checks |
 
 ## License

@@ -6,7 +6,8 @@ import threading
 import urllib.error
 import urllib.request
 
-from bridge import BridgeError, BridgeServer, NoRedirect, dumps, response_events, sse_data
+from codex_bridge import BridgeServer, response_events
+from createai import BridgeError, NoRedirect, dumps, sse_data
 from model_map import AUTO, Resolver
 
 PRIMARY_URLS = {

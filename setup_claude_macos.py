@@ -17,12 +17,12 @@ import urllib.request
 
 from anthropic_bridge import DEFAULT_MODEL
 from model_map import AUTO, KNOWN_MODELS, resolve
-from bridge import BridgeError, Upstream
+from createai import BridgeError, Upstream
 from claude_asu import doctor
 from claude_daemon import DEFAULT_PORT, KEYCHAIN_SERVICE, SHARED_SERVICE
 from codex_asu import ENVIRONMENTS
 from keychain import delete_password, load_password, password_exists, save_password
-from setup_macos import interpreter
+from setup_codex_macos import interpreter
 
 LABEL = "com.rich.asu-claude-bridge"
 ROOT = Path(__file__).resolve().parent

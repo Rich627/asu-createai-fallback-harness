@@ -5,7 +5,7 @@ from __future__ import annotations
 import ctypes
 import sys
 
-from bridge import BridgeError
+from createai import BridgeError
 
 ERR_NOT_FOUND = -25300
 

@@ -10,7 +10,7 @@ import anthropic_bridge
 import claude_router
 from anthropic_bridge import ToolMap, message_events, translate
 from model_map import KNOWN_MODELS, Resolver, resolve
-from bridge import BridgeError, dumps
+from createai import BridgeError, dumps
 from claude_router import Fallback, PrimaryQuota, RouterServer, is_quota, quota_window
 
 
@@ -199,7 +199,7 @@ class EventTest(unittest.TestCase):
 
 class RetryTest(unittest.TestCase):
     def upstream(self, statuses):
-        from bridge import Upstream
+        from createai import Upstream
         upstream = Upstream("https://example.invalid/v1", "token")
         self.calls = []
 

@@ -37,14 +37,20 @@ Each client gets a translator plus a router, sharing one CreateAI client and one
 | Layer | Claude Code | Codex |
 |---|---|---|
 | Wire format in | Anthropic Messages | OpenAI Responses |
-| Translator | `anthropic_bridge.py` | `bridge.py` |
-| Primary relay + failover | `claude_router.py` | `router.py` |
-| Background service | `claude_daemon.py` (41118) | `daemon.py` (41117) |
-| Installer | `setup_claude_macos.py` | `setup_macos.py` |
+| Translator | `anthropic_bridge.py` | `codex_bridge.py` |
+| Primary relay + failover | `claude_router.py` | `codex_router.py` |
+| Background service | `claude_daemon.py` (41118) | `codex_daemon.py` (41117) |
+| Installer | `setup_claude_macos.py` | `setup_codex_macos.py` |
 
-`bridge.py` also holds the shared pieces: `Upstream` (the CreateAI client, with 5xx retry),
-`BridgeError`, and SSE parsing. `model_map.py` resolves a requested model to its CreateAI
-counterpart. `keychain.py` reads and writes the token through Security.framework via ctypes.
+`createai.py` is the shared floor under both columns: `Upstream` (the CreateAI client, with 5xx
+retry), `BridgeError`, `dumps`, `NoRedirect` and SSE parsing. Nothing client-specific belongs in
+it — if a change to `createai.py` only makes sense for one of the two clients, it is in the wrong
+file. `model_map.py` resolves a requested model to its CreateAI counterpart. `keychain.py` reads
+and writes the token through Security.framework via ctypes.
+
+The two clients each keep their own `ToolMap` (`anthropic_bridge` keys by `by_name`,
+`codex_bridge` by `by_original` and supports namespacing). They are deliberately not merged;
+they encode different wire shapes, and both are covered by their own tests.
 
 Request flow: client → loopback server → primary provider verbatim. On a recognized quota error
 the router switches that same in-flight request to CreateAI, translating the conversation, the
@@ -80,6 +86,10 @@ own reset window expires.
 - **Claude Code cannot start if the service is down**, so `claude_daemon.py` starts serving
   before the token is readable and loads it in a retry loop. Never make startup depend on the
   Keychain.
+- **The managed-block marker is written into the user's `config.toml`.** `setup_codex_macos.py`
+  finds its block by `BEGIN_PREFIX` and writes the longer `BEGIN`, so a block left by an older
+  version is still recognized and removed. Never match on the full marker: doing so orphans
+  every block written before the text last changed. `test_setup_codex_macos.py` pins this.
 
 ## Verification expectations
 
