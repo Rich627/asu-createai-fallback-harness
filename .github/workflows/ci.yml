@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest]
+        os: [macos-latest, ubuntu-latest, windows-latest]
         python: ["3.9", "3.12", "3.14"]
     steps:
       - uses: actions/checkout@v4
@@ -24,8 +24,9 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Run the offline test suite
-        # No third-party packages and no network: every upstream is stubbed.
-        run: python -m unittest discover -p 'test_*.py' -v
+        # No third-party packages and no network: every upstream is stubbed. On windows-latest
+        # this is also the only place the Credential Manager and schtasks paths run for real.
+        run: python -m unittest discover -p "test_*.py" -v
 
   compile:
     name: byte-compile

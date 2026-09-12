@@ -25,6 +25,7 @@ RUN_CODEX_INTEGRATION=1 python3 -m unittest -v      # additionally drives the re
 python3 claude_asu.py --doctor                      # live CreateAI check (spends a little quota)
 python3 codex_asu.py --doctor
 python3 setup_claude_macos.py status                # what is installed and which provider is live
+python setup_claude_windows.py status               # the Windows twin; same subcommands
 ```
 
 There is no build step, no linter config and no dependency file: **standard library only**, and
@@ -40,13 +41,27 @@ Each client gets a translator plus a router, sharing one CreateAI client and one
 | Translator | `anthropic_bridge.py` | `codex_bridge.py` |
 | Primary relay + failover | `claude_router.py` | `codex_router.py` |
 | Background service | `claude_daemon.py` (41118) | `codex_daemon.py` (41117) |
-| Installer | `setup_claude_macos.py` | `setup_codex_macos.py` |
+| Installer (macOS) | `setup_claude_macos.py` | `setup_codex_macos.py` |
+| Installer (Windows) | `setup_claude_windows.py` | `setup_codex_windows.py` |
 
 `createai.py` is the shared floor under both columns: `Upstream` (the CreateAI client, with 5xx
 retry), `BridgeError`, `dumps`, `NoRedirect` and SSE parsing. Nothing client-specific belongs in
 it — if a change to `createai.py` only makes sense for one of the two clients, it is in the wrong
 file. `model_map.py` resolves a requested model to its CreateAI counterpart. `keychain.py` reads
 and writes the token through Security.framework via ctypes.
+
+Platform integration is the other axis, and it is deliberately thin — only two things actually
+differ per platform:
+
+| | macOS | Windows |
+|---|---|---|
+| Credential store | `keychain.py` (Security.framework) | `credvault.py` (advapi32) |
+| Autostart | LaunchAgent plist | scheduled task, `winservice.py` |
+
+`credstore.py` picks the credential backend, so nothing above it branches on `sys.platform`;
+both backends import safely anywhere and refuse to act off their own platform. `installer.py`
+holds what every installer shares (atomic writes, the health wait, the token round-trip check)
+and `codex_config.py` holds the `config.toml` editing, so a fix lands once instead of four times.
 
 The two clients each keep their own `ToolMap` (`anthropic_bridge` keys by `by_name`,
 `codex_bridge` by `by_original` and supports namespacing). They are deliberately not merged;
@@ -82,14 +97,26 @@ own reset window expires.
   `config.toml` alone if anything fails. Keep that order.
 - **A LaunchAgent's interpreter is part of the Keychain ACL.** The item trusts binaries, so both
   agents must use the same `interpreter()` result or macOS prompts the user for the token on
-  every service start.
+  every service start. This is macOS-only: a Credential Manager entry belongs to the user, not
+  to a trusted binary, so `winservice.interpreter()` is free to prefer `pythonw.exe` and to
+  change between installs.
+- **A scheduled task needs `ExecutionTimeLimit` of `PT0S`.** The Task Scheduler default stops a
+  task after 72 hours, which would take the bridge down and leave the client pointed at a dead
+  port. `RestartOnFailure` is the `KeepAlive` equivalent, and `Hidden` plus `pythonw.exe` is what
+  keeps a console window off the user's screen. The task is defined as XML because `schtasks
+  /TR` cannot express any of this; the file must be UTF-16, which is what `write_task_xml` does.
+- **`pythonw.exe` has no console, so the daemons take `--log`.** A LaunchAgent redirects stdout
+  for us and a scheduled task has no equivalent. Do not replace this with shell redirection in
+  the task action — that reintroduces a console window and depends on how the interpreter was
+  launched.
 - **Claude Code cannot start if the service is down**, so `claude_daemon.py` starts serving
   before the token is readable and loads it in a retry loop. Never make startup depend on the
   Keychain.
-- **The managed-block marker is written into the user's `config.toml`.** `setup_codex_macos.py`
-  finds its block by `BEGIN_PREFIX` and writes the longer `BEGIN`, so a block left by an older
-  version is still recognized and removed. Never match on the full marker: doing so orphans
-  every block written before the text last changed. `test_setup_codex_macos.py` pins this.
+- **The managed-block marker is written into the user's `config.toml`.** `codex_config` finds
+  its block by `BEGIN_PREFIX` and writes the longer `BEGIN`, so a block left by an older version
+  is still recognized and removed. Never match on the full marker: doing so orphans every block
+  written before the text last changed, and the text has already changed twice.
+  `test_codex_config.py` pins both historical spellings.
 
 ## Verification expectations
 
@@ -104,6 +131,13 @@ while `claude_asu.py --force-fallback` forces that one instance and never writes
 `router.py` has no force path at all — it switches only on a real `PrimaryQuota`, so exercising
 Codex fallback means hitting an actual usage limit or stubbing the primary.
 
+Windows is the exception to all of that, and the gap is recorded in the README's Status table
+rather than papered over. CI on `windows-latest` genuinely exercises the Credential Manager
+round trip against real `advapi32` and a real `schtasks` create/query/delete, and the task
+definition is asserted field by field — but nobody has confirmed that the logon trigger brings
+the bridge up on a desktop, or driven Claude Code or Codex through it on Windows. Do not promote
+those rows to "verified" on the strength of a green CI run.
+
 After changing code that a LaunchAgent runs, restart it — a running service keeps the old code:
 
 ```sh
@@ -113,5 +147,6 @@ launchctl kickstart -k gui/$(id -u)/com.rich.asu-claude-bridge
 ## Repository
 
 Public: https://github.com/Rich627/asu-unlimited-tokens (MIT). CI runs the offline
-suite on macOS and Linux across Python 3.9, 3.12 and 3.14 — 3.9 support is real, it is what
-`/usr/bin/python3` provides when Homebrew's python is missing.
+suite on macOS, Linux and Windows across Python 3.9, 3.12 and 3.14 — 3.9 support is real, it is
+what `/usr/bin/python3` provides when Homebrew's python is missing. The Windows-only tests skip
+on every other platform, so a green local run says nothing about them.

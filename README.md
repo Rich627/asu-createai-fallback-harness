@@ -35,12 +35,27 @@ Codex       ──► 127.0.0.1:41117 ──► chatgpt.com/backend-api/codex   
 | Claude Code usage-limit detection | rule-based, **not yet observed against a live Anthropic 429** |
 | Codex → CreateAI translation, streaming, tool calls | verified end to end |
 | Codex usage-limit detection | **verified against a genuinely exhausted ChatGPT quota** |
-| Anything but macOS | the bridges are portable; the installers are not |
+| macOS installers (LaunchAgent, Keychain) | verified by installing, uninstalling and reinstalling on a real machine |
+| Windows installers (scheduled task, Credential Manager) | **not verified on a real Windows machine.** See below |
+| Linux and everything else | the bridges are portable; the installers are macOS and Windows only |
+
+### What "not verified" means for Windows
+
+The parts CI can actually execute, it executes: on `windows-latest` the Credential Manager
+round trip runs against real `advapi32` — save, read back byte for byte, overwrite, delete, and
+the not-found case — and a scheduled task is really created, queried and deleted. The task
+definition is parsed and asserted field by field.
+
+What no automated run can tell us is whether the logon trigger brings the bridge up on a real
+desktop, and whether Claude Code and Codex on Windows are happy talking to it end to end. If you
+run it there, the Status row above should be corrected from what you find.
 
 ## Requirements
 
-- macOS (Keychain for the token, a per-user LaunchAgent for autostart)
-- Python 3.9+ (3.9 through 3.14 are covered by CI)
+- macOS, or Windows 10/11
+  - macOS stores the token in the Keychain and autostarts a per-user LaunchAgent
+  - Windows stores it in Credential Manager and autostarts a per-user scheduled task
+- Python 3.9+ (3.9 through 3.14 are covered by CI, on all three operating systems)
 - Claude Code and/or Codex CLI, already logged in
 - An ASU CreateAI Builder project and a **Service** API token
 
@@ -99,6 +114,23 @@ python3 setup_codex_macos.py uninstall
 This installs the LaunchAgent `com.rich.asu-codex-bridge` on `127.0.0.1:41117` and adds a
 `model_provider` to `~/.codex/config.toml` (backed up as `config.toml.asu-backup-*`).
 Fully quit and reopen Codex afterwards.
+
+#### On Windows
+
+Same subcommands, same order, same refusal to touch client configuration until the service
+answers — only the service and the credential store differ:
+
+```powershell
+python setup_claude_windows.py install    # scheduled task "ASU Claude Bridge", port 41118
+python setup_codex_windows.py install     # scheduled task "ASU Codex Bridge",  port 41117
+python setup_claude_windows.py status
+python setup_codex_windows.py uninstall
+```
+
+Pass `--use-stored-token` to reuse the token already in Credential Manager instead of being
+asked for it again. The task runs `pythonw.exe` so no console window appears; because that has
+no console to redirect, the service writes its own log under
+`%LOCALAPPDATA%\asu-unlimited-tokens\`.
 
 ## Turning fallback on and off
 
@@ -178,8 +210,9 @@ CreateAI is an OpenAI-compatible Chat Completions API, so while it is serving:
 ## Security notes
 
 - Both services bind to `127.0.0.1` only and reject any request carrying an `Origin` header.
-- The CreateAI token is never forwarded to Anthropic or OpenAI, never written to client config
-  or to the LaunchAgent plist, and never printed.
+- The CreateAI token is never forwarded to Anthropic or OpenAI, never written to client config,
+  never written into the LaunchAgent plist or the scheduled task definition, and never printed.
+  It lives in the macOS Keychain or Windows Credential Manager and is read by the service.
 - Requests, responses and credentials are not logged. The log records switch events, the HTTP
   status and the provider's own error message.
 - During fallback your conversation, code excerpts and tool output are sent to CreateAI and
@@ -190,9 +223,12 @@ CreateAI is an OpenAI-compatible Chat Completions API, so while it is serving:
 If the bridge is down, every client session pointed at it fails. To bypass it immediately:
 
 ```sh
-ANTHROPIC_BASE_URL= claude           # one session
+ANTHROPIC_BASE_URL= claude                # one session
 python3 setup_claude_macos.py uninstall   # permanently, restores the previous settings
 ```
+
+On Windows, `set ANTHROPIC_BASE_URL=` for one session, or
+`python setup_claude_windows.py uninstall`.
 
 The LaunchAgents use `KeepAlive`, so a crashed service is restarted by macOS within seconds,
 and the Claude service starts even before its Keychain token is readable so a locked Keychain
@@ -205,7 +241,9 @@ python3 -m unittest discover -p 'test_*.py' -v      # offline, no network, no AP
 RUN_CODEX_INTEGRATION=1 python3 -m unittest -v      # additionally drives the real Codex CLI
 ```
 
-CI runs the offline suite on macOS and Linux across Python 3.9, 3.12 and 3.14.
+CI runs the offline suite on macOS, Linux and Windows across Python 3.9, 3.12 and 3.14. The
+Windows-only tests — Credential Manager and scheduled tasks — skip everywhere else, so a green
+run on your own machine does not mean they ran.
 
 ## Layout
 
@@ -218,8 +256,14 @@ CI runs the offline suite on macOS and Linux across Python 3.9, 3.12 and 3.14.
 | `claude_router.py` | Claude primary relay with usage-limit failover |
 | `model_map.py` | Requested model → CreateAI model resolution |
 | `keychain.py` | Native macOS Keychain access, no secret in `argv` |
+| `credvault.py` | Native Windows Credential Manager access, same four functions |
+| `credstore.py` | Picks the credential store for this platform so nothing above it branches |
+| `installer.py` | Installer pieces that are identical on every platform |
+| `codex_config.py` | Reading and editing Codex's `config.toml` |
+| `winservice.py` | Windows scheduled tasks: the LaunchAgent equivalent |
 | `codex_daemon.py`, `claude_daemon.py` | The two background services |
-| `setup_codex_macos.py`, `setup_claude_macos.py` | Install, status, uninstall |
+| `setup_codex_macos.py`, `setup_claude_macos.py` | Install, status, uninstall (macOS) |
+| `setup_codex_windows.py`, `setup_claude_windows.py` | Install, status, uninstall (Windows) |
 | `codex_asu.py`, `claude_asu.py` | One-off runs and live checks |
 
 ## License

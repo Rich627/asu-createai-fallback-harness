@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Long-running macOS login service for ASU Codex automatic failover."""
+"""Long-running login service for ASU Codex automatic failover (macOS and Windows)."""
 
 import argparse
 import getpass
 import sys
+from pathlib import Path
 
 from createai import BridgeError, Upstream
 from codex_asu import ENVIRONMENTS
 from codex_router import FallbackServer, Primary
-from keychain import load_password
+import credstore
+from credstore import load_password
 from model_map import AUTO
 
 KEYCHAIN_SERVICE = "edu.asu.createai.codex-fallback"
@@ -18,7 +20,7 @@ DEFAULT_PORT = 41117
 def keychain_token():
     token = load_password(KEYCHAIN_SERVICE, getpass.getuser()).strip()
     if not token:
-        raise BridgeError("CreateAI token in macOS Keychain is empty.")
+        raise BridgeError(f"The CreateAI token stored in {credstore.BACKEND} is empty.")
     return token
 
 
@@ -30,7 +32,16 @@ def main():
                              "or pass one exact CreateAI id")
     parser.add_argument("--primary", choices=("chatgpt", "api"), default="chatgpt")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    parser.add_argument("--log", default=None,
+                        help="append stdout and stderr here. A LaunchAgent redirects for us; "
+                             "a Windows scheduled task has no equivalent, so the service does it")
     args = parser.parse_args()
+    if args.log:
+        # A scheduled task cannot redirect for us, so do it before anything is written.
+        destination = Path(args.log)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        stream = open(destination, "a", buffering=1, encoding="utf-8", errors="replace")
+        sys.stdout = sys.stderr = stream
     try:
         token = keychain_token()
         server = FallbackServer(
